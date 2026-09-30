@@ -38,7 +38,7 @@ public sealed class BfsTraceEngine
 
         var sw = Stopwatch.StartNew();
 
-        int maxNodes = Math.Clamp(request.MaxResults, 1, 500_000);
+        int maxNodes = Math.Clamp(request.MaxResults, 1, _graph.NodeCount);
         int maxDepth = Math.Clamp(request.MaxDepth, 0, 30);
         ushort minWeight = request.MinSynapseWeight;
 
