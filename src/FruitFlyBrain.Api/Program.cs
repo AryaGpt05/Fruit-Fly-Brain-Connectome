@@ -125,9 +125,13 @@ app.MapPost("/api/trace/bfs", (BfsTraceRequest req, BfsTraceEngine engine) =>
 .WithDescription("Performs zero-allocation BFS to trace all downstream neurons activated from a source neuron");
 
 // Endpoint: Get Single Neuron Details & Neighbors
-app.MapGet("/api/neurons/{id:long}", (long id, INeuronGraph g) =>
+app.MapGet("/api/neurons/{id}", (string id, INeuronGraph g) =>
 {
-    ulong neuronId = (ulong)id;
+    if (!ulong.TryParse(id, out var neuronId))
+    {
+        return Results.BadRequest(new { error = $"Invalid neuron ID '{id}'." });
+    }
+
     int idx = g.IdMap.TryGetIndex(neuronId);
     if (idx < 0)
     {
@@ -141,14 +145,14 @@ app.MapGet("/api/neurons/{id:long}", (long id, INeuronGraph g) =>
     {
         partners.Add(new
         {
-            targetNeuronId = g.IdMap.GetId(neighbors[i]),
+            targetNeuronId = g.IdMap.GetId(neighbors[i]).ToString(),
             synapseWeight = weights[i]
         });
     }
 
     return Results.Ok(new
     {
-        neuronId = neuronId,
+        neuronId = neuronId.ToString(),
         denseIndex = idx,
         outDegree = neighbors.Length,
         outgoingConnections = partners
@@ -231,6 +235,9 @@ static string FindPrecomputedDirectory()
 
 sealed class SampleNeuronInfo
 {
+    [System.Text.Json.Serialization.JsonNumberHandling(
+        System.Text.Json.Serialization.JsonNumberHandling.AllowReadingFromString |
+        System.Text.Json.Serialization.JsonNumberHandling.WriteAsString)]
     public ulong NeuronId { get; set; }
     public int Degree { get; set; }
     public string Label { get; set; } = string.Empty;

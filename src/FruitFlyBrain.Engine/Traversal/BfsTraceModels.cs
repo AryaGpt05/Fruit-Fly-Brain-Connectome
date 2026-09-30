@@ -1,7 +1,10 @@
+using System.Text.Json.Serialization;
+
 namespace FruitFlyBrain.Engine.Traversal;
 
 public sealed record BfsTraceRequest
 {
+    [JsonNumberHandling(JsonNumberHandling.AllowReadingFromString | JsonNumberHandling.WriteAsString)]
     public required ulong SourceNeuronId { get; init; }
     public int MaxDepth { get; init; } = 3;
     public ushort MinSynapseWeight { get; init; } = 1;
@@ -10,8 +13,10 @@ public sealed record BfsTraceRequest
 
 public sealed record ActivatedNeuron
 {
+    [JsonNumberHandling(JsonNumberHandling.AllowReadingFromString | JsonNumberHandling.WriteAsString)]
     public required ulong NeuronId { get; init; }
     public required int Depth { get; init; }
+    [JsonNumberHandling(JsonNumberHandling.AllowReadingFromString | JsonNumberHandling.WriteAsString)]
     public required ulong PredecessorId { get; init; }
     public required ushort SynapseWeight { get; init; }
     public required float ActivationScore { get; init; }
@@ -19,7 +24,9 @@ public sealed record ActivatedNeuron
 
 public sealed record TraceEdge
 {
+    [JsonNumberHandling(JsonNumberHandling.AllowReadingFromString | JsonNumberHandling.WriteAsString)]
     public required ulong SourceId { get; init; }
+    [JsonNumberHandling(JsonNumberHandling.AllowReadingFromString | JsonNumberHandling.WriteAsString)]
     public required ulong TargetId { get; init; }
     public required ushort Weight { get; init; }
     public required int Depth { get; init; }
@@ -27,6 +34,7 @@ public sealed record TraceEdge
 
 public sealed record BfsTraceResult
 {
+    [JsonNumberHandling(JsonNumberHandling.AllowReadingFromString | JsonNumberHandling.WriteAsString)]
     public required ulong SourceNeuronId { get; init; }
     public required bool FoundSource { get; init; }
     public required int TotalVisited { get; init; }
