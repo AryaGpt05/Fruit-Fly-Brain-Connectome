@@ -3,200 +3,425 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Fruit Fly Brain Connectome - Neural Cascade Tracer</title>
+  <title>Fruit Fly Brain Connectome — Neural Cascade Tracer</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
   <script src="https://cdn.tailwindcss.com"></script>
   <script>
     tailwind.config = {
       darkMode: 'class',
-      theme: { extend: { colors: { brand: { 500: '#10b981', 600: '#059669' } } } }
+      theme: {
+        extend: {
+          fontFamily: {
+            sans: ['"Plus Jakarta Sans"', 'sans-serif'],
+            mono: ['"JetBrains Mono"', 'monospace'],
+          },
+          colors: {
+            brand: {
+              400: '#34d399',
+              500: '#10b981',
+              600: '#059669',
+            },
+            neuro: {
+              root: '#10b981',
+              hop1: '#06b6d4',
+              hop2: '#3b82f6',
+              hop3: '#8b5cf6',
+              hop4: '#ec4899',
+              hop5: '#f97316'
+            }
+          },
+          animation: {
+            'pulse-subtle': 'pulse 3s cubic-bezier(0.4, 0, 0.6, 1) infinite',
+            'glow-spin': 'spin 12s linear infinite',
+          }
+        }
+      }
     }
   </script>
   <style>
-    @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600;700&family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap');
-    body { font-family: 'Plus Jakarta Sans', sans-serif; }
-    code, pre, .mono { font-family: 'JetBrains Mono', monospace; }
-    canvas { cursor: grab; }
-    canvas:active { cursor: grabbing; }
-    input[type="range"] { accent-color: #10b981; }
-    ::-webkit-scrollbar { width: 6px; }
-    ::-webkit-scrollbar-track { background: #0f172a; }
-    ::-webkit-scrollbar-thumb { background: #334155; border-radius: 3px; }
+    /* Custom Range Slider */
+    input[type="range"] {
+      -webkit-appearance: none;
+      appearance: none;
+      background: #1e293b;
+      border-radius: 9999px;
+      height: 6px;
+    }
+    input[type="range"]::-webkit-slider-thumb {
+      -webkit-appearance: none;
+      appearance: none;
+      width: 18px;
+      height: 18px;
+      border-radius: 50%;
+      background: #10b981;
+      cursor: pointer;
+      border: 2px solid #0f172a;
+      box-shadow: 0 0 10px rgba(16, 185, 129, 0.5);
+      transition: transform 0.15s ease, background-color 0.15s ease;
+    }
+    input[type="range"]::-webkit-slider-thumb:hover {
+      transform: scale(1.2);
+      background: #34d399;
+    }
+    input[type="range"]:focus-visible {
+      outline: 2px solid #10b981;
+      outline-offset: 2px;
+    }
+
+    /* Scrollbars */
+    ::-webkit-scrollbar { width: 6px; height: 6px; }
+    ::-webkit-scrollbar-track { background: rgba(15, 23, 42, 0.6); }
+    ::-webkit-scrollbar-thumb { background: #334155; border-radius: 9999px; }
+    ::-webkit-scrollbar-thumb:hover { background: #475569; }
+
+    /* Canvas cursor states */
+    #graphCanvas { cursor: grab; }
+    #graphCanvas.dragging { cursor: grabbing; }
+
+    /* Radial background gradient */
+    .bg-radial-grid {
+      background-image: radial-gradient(circle at 50% 0%, rgba(16, 185, 129, 0.08) 0%, transparent 60%),
+                        linear-gradient(to bottom, rgba(15, 23, 42, 0.95), rgba(2, 6, 23, 1));
+    }
   </style>
 </head>
-<body class="bg-slate-950 text-slate-100 min-h-screen flex flex-col">
+<body class="bg-slate-950 text-slate-100 min-h-screen flex flex-col font-sans selection:bg-emerald-500/30 selection:text-emerald-300">
 
-  <!-- Header -->
-  <header class="border-b border-slate-800 bg-slate-900/60 backdrop-blur sticky top-0 z-50">
-    <div class="max-w-[1600px] mx-auto px-4 py-3 flex flex-wrap items-center justify-between gap-4">
-      <div class="flex items-center space-x-3">
-        <div class="w-10 h-10 rounded-xl bg-gradient-to-tr from-emerald-500 to-cyan-500 flex items-center justify-center shadow-lg shadow-emerald-500/20">
-          <svg class="w-6 h-6 text-slate-950" fill="currentColor" viewBox="0 0 24 24"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 17.93c-3.95-.49-7-3.85-7-7.93 0-.62.08-1.21.21-1.79L9 15v1c0 1.1.9 2 2 2v1.93zm6.9-2.54c-.26-.81-1-1.39-1.9-1.39h-1v-3c0-.55-.45-1-1-1H8v-2h2c.55 0 1-.45 1-1V7h2c1.1 0 2-.9 2-2v-.41c2.93 1.19 5 4.06 5 7.41 0 2.08-.8 3.97-2.1 5.39z"/></svg>
+  <!-- Toast Notification Container -->
+  <div id="toastContainer" class="fixed bottom-5 right-5 z-50 flex flex-col gap-2.5 pointer-events-none max-w-sm w-full px-4" aria-live="polite"></div>
+
+  <!-- Benchmark Modal -->
+  <dialog id="benchmarkModal" class="bg-transparent backdrop:bg-slate-950/80 backdrop:backdrop-blur-sm p-4 max-w-lg w-full rounded-2xl outline-none">
+    <div class="bg-slate-900 border border-slate-700/80 rounded-2xl p-6 shadow-2xl text-slate-100 space-y-5">
+      <div class="flex items-center justify-between border-b border-slate-800 pb-4">
+        <div class="flex items-center gap-3">
+          <div class="w-9 h-9 rounded-xl bg-purple-500/20 text-purple-400 border border-purple-500/30 flex items-center justify-center font-bold">
+            ⚡
+          </div>
+          <div>
+            <h3 class="text-base font-bold text-white">Engine Performance Benchmark</h3>
+            <p class="text-xs text-slate-400">Randomized Multi-Iteration BFS Traversal</p>
+          </div>
+        </div>
+        <button onclick="$('benchmarkModal').close()" class="text-slate-400 hover:text-white p-1 rounded-lg hover:bg-slate-800 transition focus-visible:ring-2 focus-visible:ring-emerald-400" aria-label="Close modal">
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
+        </button>
+      </div>
+      <div id="benchmarkModalContent" class="space-y-4">
+        <!-- Injected dynamically -->
+      </div>
+      <div class="pt-2 flex justify-end">
+        <button onclick="$('benchmarkModal').close()" class="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 border border-slate-700 text-xs font-semibold text-white transition focus-visible:ring-2 focus-visible:ring-emerald-400">
+          Close
+        </button>
+      </div>
+    </div>
+  </dialog>
+
+  <!-- Navigation Bar -->
+  <header class="border-b border-slate-800/80 bg-slate-950/80 backdrop-blur-xl sticky top-0 z-40">
+    <div class="max-w-[1720px] mx-auto px-4 sm:px-6 py-3 flex flex-wrap items-center justify-between gap-4">
+      <div class="flex items-center space-x-3.5">
+        <div class="relative">
+          <div class="w-10 h-10 rounded-xl bg-gradient-to-tr from-emerald-500 via-teal-500 to-cyan-500 flex items-center justify-center shadow-lg shadow-emerald-500/20">
+            <svg class="w-6 h-6 text-slate-950" fill="currentColor" viewBox="0 0 24 24"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 17.93c-3.95-.49-7-3.85-7-7.93 0-.62.08-1.21.21-1.79L9 15v1c0 1.1.9 2 2 2v1.93zm6.9-2.54c-.26-.81-1-1.39-1.9-1.39h-1v-3c0-.55-.45-1-1-1H8v-2h2c.55 0 1-.45 1-1V7h2c1.1 0 2-.9 2-2v-.41c2.93 1.19 5 4.06 5 7.41 0 2.08-.8 3.97-2.1 5.39z"/></svg>
+          </div>
+          <span class="absolute -bottom-1 -right-1 flex h-3 w-3">
+            <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+            <span class="relative inline-flex rounded-full h-3 w-3 bg-emerald-500 border-2 border-slate-950"></span>
+          </span>
         </div>
         <div>
-          <h1 class="text-lg font-bold tracking-tight text-white flex items-center gap-2">
-            Fruit Fly Brain Connectome
-            <span class="text-xs px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/30">FlyWire v783</span>
-          </h1>
-          <p class="text-xs text-slate-400">High-Performance Neural Activation Cascade Search</p>
+          <div class="flex items-center gap-2">
+            <h1 class="text-base sm:text-lg font-bold tracking-tight text-white">Fruit Fly Brain Connectome</h1>
+            <span class="text-[11px] font-mono px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/30 font-medium">FlyWire v783</span>
+          </div>
+          <p class="text-xs text-slate-400 hidden sm:block">Whole-Brain Synaptic Propagation & Neural Cascade Visualizer</p>
         </div>
       </div>
-      <div id="statsBar" class="flex items-center gap-4 text-xs font-mono">
-        <div class="px-3 py-1.5 rounded-lg bg-slate-800/80 border border-slate-700">
-          <span class="text-slate-400">Neurons:</span> <span id="statNodes" class="text-emerald-400 font-bold">--</span>
+
+      <!-- Telemetry Status Pills -->
+      <div id="statsBar" class="flex items-center gap-2 sm:gap-3 text-xs font-mono">
+        <div class="px-3 py-1.5 rounded-xl bg-slate-900/90 border border-slate-800 flex items-center gap-2 shadow-inner">
+          <span class="text-slate-400 text-[11px]">Neurons</span>
+          <span id="statNodes" class="text-emerald-400 font-bold">138,639</span>
         </div>
-        <div class="px-3 py-1.5 rounded-lg bg-slate-800/80 border border-slate-700">
-          <span class="text-slate-400">Synapses:</span> <span id="statEdges" class="text-cyan-400 font-bold">--</span>
+        <div class="px-3 py-1.5 rounded-xl bg-slate-900/90 border border-slate-800 flex items-center gap-2 shadow-inner">
+          <span class="text-slate-400 text-[11px]">Synapses</span>
+          <span id="statEdges" class="text-cyan-400 font-bold">16.8M</span>
         </div>
-        <div class="px-3 py-1.5 rounded-lg bg-slate-800/80 border border-slate-700">
-          <span class="text-slate-400">CSR RAM:</span> <span id="statRam" class="text-purple-400 font-bold">--</span>
+        <div class="px-3 py-1.5 rounded-xl bg-slate-900/90 border border-slate-800 flex items-center gap-2 shadow-inner hidden md:flex">
+          <span class="text-slate-400 text-[11px]">CSR RAM</span>
+          <span id="statRam" class="text-purple-400 font-bold">98.5 MB</span>
         </div>
-        <div class="flex items-center gap-1.5 text-emerald-400">
-          <span class="relative flex h-2.5 w-2.5"><span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span><span class="relative inline-flex rounded-full h-2.5 w-2.5 bg-emerald-500"></span></span>
-          <span>Online</span>
-        </div>
+        <button id="btnBenchmark" class="px-3 py-1.5 rounded-xl bg-purple-500/10 hover:bg-purple-500/20 border border-purple-500/30 text-purple-300 font-semibold transition active:scale-95 flex items-center gap-1.5 focus-visible:ring-2 focus-visible:ring-purple-400">
+          <span>⚡</span> <span class="hidden sm:inline">Benchmark</span>
+        </button>
       </div>
     </div>
   </header>
 
-  <!-- Main -->
-  <main class="flex-1 max-w-[1600px] w-full mx-auto p-4 grid grid-cols-1 lg:grid-cols-12 gap-5">
+  <!-- Main Grid Layout -->
+  <main class="flex-1 max-w-[1720px] w-full mx-auto p-4 sm:p-6 grid grid-cols-1 lg:grid-cols-12 gap-6 bg-radial-grid">
 
-    <!-- Left Controls -->
-    <div class="lg:col-span-3 space-y-4">
-      <div class="bg-slate-900 border border-slate-800 rounded-2xl p-5 shadow-xl space-y-5">
+    <!-- Left Column: Controls & Search Telemetry (col-span-4 on lg, 3 on xl) -->
+    <div class="lg:col-span-4 xl:col-span-3 space-y-5">
+
+      <!-- Query Form Card -->
+      <section class="bg-slate-900/80 backdrop-blur-md border border-slate-800/80 rounded-2xl p-5 shadow-2xl space-y-5">
         <div class="border-b border-slate-800 pb-3 flex items-center justify-between">
-          <h2 class="font-semibold text-sm text-slate-200 uppercase tracking-wider flex items-center gap-2">
+          <h2 class="font-bold text-xs uppercase tracking-wider text-slate-300 flex items-center gap-2">
             <svg class="w-4 h-4 text-emerald-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"/></svg>
-            Trace Configuration
+            Cascade Configuration
           </h2>
-          <button id="btnBenchmark" class="text-xs px-2.5 py-1 rounded bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-300 transition">⚡ Benchmark</button>
+          <span class="text-[10px] font-mono text-slate-500">Zero-GC BFS</span>
         </div>
 
-        <!-- Neuron ID -->
+        <!-- Neuron ID Input -->
         <div class="space-y-2">
-          <label for="inputNeuronId" class="text-xs text-slate-300 font-medium">Source Neuron Root ID</label>
-          <input type="text" id="inputNeuronId" class="w-full bg-slate-950 border border-slate-700 rounded-xl px-4 py-2.5 text-sm font-mono text-white placeholder-slate-600 focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 transition" placeholder="e.g. 720575940606692542">
-          <div id="samplePills" class="flex flex-wrap gap-1.5 text-xs font-mono pt-1"></div>
+          <div class="flex items-center justify-between">
+            <label for="inputNeuronId" class="text-xs font-semibold text-slate-300">Source Neuron Root ID</label>
+            <span class="text-[10px] text-slate-500 font-mono">64-bit ID</span>
+          </div>
+          <div class="relative">
+            <input type="text" id="inputNeuronId" 
+                   class="w-full bg-slate-950/90 border border-slate-700/80 rounded-xl px-3.5 py-2.5 text-xs sm:text-sm font-mono text-white placeholder-slate-600 focus:outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20 transition pr-10 shadow-inner" 
+                   placeholder="e.g. 720575940606692542"
+                   autocomplete="off" spellcheck="false">
+            <button id="btnClearInput" class="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-300 p-1 rounded-md hidden focus-visible:ring-2 focus-visible:ring-emerald-400" aria-label="Clear input">
+              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
+            </button>
+          </div>
+
+          <!-- Quick Samples Container -->
+          <div class="space-y-1.5 pt-1">
+            <span class="text-[11px] font-medium text-slate-400 block">Quick Hub & Sample Neurons:</span>
+            <div id="samplePills" class="flex flex-wrap gap-1.5 text-xs font-mono">
+              <!-- Loaded via JS -->
+            </div>
+          </div>
         </div>
 
         <!-- Sliders -->
-        <div class="space-y-1.5">
-          <div class="flex justify-between text-xs"><label class="text-slate-300 font-medium">Max Depth</label><span id="depthVal" class="font-mono text-emerald-400 font-bold">3</span></div>
-          <input type="range" id="sliderDepth" min="1" max="10" value="3" class="w-full h-1.5 bg-slate-800 rounded-lg appearance-none cursor-pointer">
-        </div>
-        <div class="space-y-1.5">
-          <div class="flex justify-between text-xs"><label class="text-slate-300 font-medium">Min Synapse Weight</label><span id="weightVal" class="font-mono text-cyan-400 font-bold">≥ 2</span></div>
-          <input type="range" id="sliderWeight" min="1" max="30" value="2" class="w-full h-1.5 bg-slate-800 rounded-lg appearance-none cursor-pointer">
-        </div>
-        <div class="space-y-1.5">
-          <div class="flex justify-between text-xs"><label class="text-slate-300 font-medium">Max Results</label><span id="maxNodesVal" class="font-mono text-purple-400 font-bold">2,000</span></div>
-          <input type="range" id="sliderMaxNodes" min="100" max="50000" step="100" value="2000" class="w-full h-1.5 bg-slate-800 rounded-lg appearance-none cursor-pointer">
-          <p class="text-[10px] text-slate-500">Higher values give complete cascades. Graph viz caps at 800 nodes for performance; table shows all.</p>
-        </div>
-
-        <button id="btnTrace" class="w-full bg-gradient-to-r from-emerald-500 to-cyan-500 hover:from-emerald-600 hover:to-cyan-600 text-slate-950 font-bold py-3 px-4 rounded-xl shadow-lg shadow-emerald-500/25 flex items-center justify-center gap-2 transition active:scale-[0.99]">
-          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14 5l7 7m0 0l-7 7m7-7H3"/></svg>
-          Trace Downstream Activation
-        </button>
-      </div>
-
-      <!-- Telemetry -->
-      <div class="bg-slate-900 border border-slate-800 rounded-2xl p-4 shadow-xl space-y-3">
-        <h3 class="text-xs font-semibold text-slate-400 uppercase tracking-wider">Search Telemetry</h3>
-        <div class="grid grid-cols-2 gap-3 text-xs">
-          <div class="p-3 rounded-xl bg-slate-950/60 border border-slate-800/80">
-            <span class="text-slate-500 block mb-0.5">Latency</span>
-            <span id="telLatency" class="text-emerald-400 text-lg font-bold font-mono">--</span>
-          </div>
-          <div class="p-3 rounded-xl bg-slate-950/60 border border-slate-800/80">
-            <span class="text-slate-500 block mb-0.5">Activated</span>
-            <span id="telVisited" class="text-cyan-400 text-lg font-bold font-mono">--</span>
-          </div>
-          <div class="p-3 rounded-xl bg-slate-950/60 border border-slate-800/80">
-            <span class="text-slate-500 block mb-0.5">Depth</span>
-            <span id="telDepth" class="text-purple-400 text-lg font-bold font-mono">--</span>
-          </div>
-          <div class="p-3 rounded-xl bg-slate-950/60 border border-slate-800/80">
-            <span class="text-slate-500 block mb-0.5">Edges</span>
-            <span id="telEdges" class="text-pink-400 text-lg font-bold font-mono">--</span>
-          </div>
-        </div>
-        <!-- Histogram -->
-        <div id="depthHistogram" class="space-y-1.5 font-mono text-xs pt-1">
-          <p class="text-slate-600 text-xs italic">Run a trace to see cascade flow.</p>
-        </div>
-      </div>
-    </div>
-
-    <!-- Right: Graph + Table -->
-    <div class="lg:col-span-9 space-y-4 flex flex-col">
-      <!-- Canvas -->
-      <div class="bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden shadow-xl flex-1 flex flex-col min-h-[520px]">
-        <div class="bg-slate-950/80 px-4 py-2 border-b border-slate-800 flex items-center justify-between text-xs">
-          <div class="flex items-center space-x-2">
-            <span class="w-2.5 h-2.5 rounded-full bg-emerald-500"></span>
-            <span class="font-medium text-slate-300">Force-Directed Cascade Graph</span>
-            <span id="graphNodeCount" class="text-slate-500 ml-2"></span>
-          </div>
-          <div class="flex items-center space-x-3 text-slate-400">
-            <span class="flex items-center gap-1"><span class="w-2 h-2 rounded-full bg-emerald-400"></span> Root</span>
-            <span class="flex items-center gap-1"><span class="w-2 h-2 rounded-full bg-cyan-400"></span> Hop 1</span>
-            <span class="flex items-center gap-1"><span class="w-2 h-2 rounded-full bg-blue-500"></span> Hop 2</span>
-            <span class="flex items-center gap-1"><span class="w-2 h-2 rounded-full bg-purple-500"></span> Hop 3+</span>
-            <label class="flex items-center gap-1 ml-2 cursor-pointer"><input type="checkbox" id="chkLabels" class="accent-emerald-500"> Labels</label>
-            <button id="btnResetView" class="ml-2 px-2 py-0.5 rounded bg-slate-800 hover:bg-slate-700 text-[11px] text-slate-300 border border-slate-700">Reset</button>
-          </div>
-        </div>
-        <div class="relative flex-1 bg-slate-950">
-          <canvas id="graphCanvas" class="w-full h-full block"></canvas>
-          <div id="canvasOverlay" class="absolute inset-0 flex flex-col items-center justify-center pointer-events-none p-6 text-center">
-            <div class="p-5 rounded-2xl bg-slate-900/90 border border-slate-800 max-w-sm pointer-events-auto">
-              <svg class="w-10 h-10 text-emerald-400 mx-auto mb-2 opacity-80" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M13 10V3L4 14h7v7l9-11h-7z"/></svg>
-              <h4 class="font-semibold text-white text-sm mb-1">Neural Cascade Visualizer</h4>
-              <p class="text-xs text-slate-400 mb-3">Select a sample neuron or enter a FlyWire root ID to trace its activation cascade.</p>
-              <button id="btnQuickStart" class="text-xs font-semibold px-3 py-1.5 rounded-lg bg-emerald-500 hover:bg-emerald-600 text-slate-950 transition">Load Top Hub Neuron (3,015 connections)</button>
+        <div class="space-y-4 pt-1 border-t border-slate-800/80">
+          <!-- Depth Slider -->
+          <div class="space-y-1.5">
+            <div class="flex justify-between items-center text-xs">
+              <label for="sliderDepth" class="font-semibold text-slate-300 flex items-center gap-1.5">
+                <span>Max Depth</span>
+                <span class="text-[10px] text-slate-500 font-normal">(Hops)</span>
+              </label>
+              <span id="depthVal" class="font-mono text-emerald-400 font-bold bg-emerald-500/10 px-2 py-0.5 rounded border border-emerald-500/20">3 hops</span>
+            </div>
+            <input type="range" id="sliderDepth" min="1" max="8" value="3" class="w-full">
+            <div class="flex justify-between text-[10px] font-mono text-slate-500 px-1">
+              <span>1 (Direct)</span>
+              <span>3 (Local)</span>
+              <span>8 (Brain-wide)</span>
             </div>
           </div>
-          <div id="nodeTooltip" class="absolute hidden pointer-events-none bg-slate-900/95 border border-slate-700 rounded-xl p-3 shadow-2xl text-xs font-mono z-20 max-w-xs">
-            <div id="tooltipContent"></div>
-          </div>
-        </div>
-      </div>
 
-      <!-- Results Table -->
-      <div class="bg-slate-900 border border-slate-800 rounded-2xl p-4 shadow-xl">
-        <div class="flex items-center justify-between pb-3 border-b border-slate-800">
-          <h3 class="text-xs font-semibold text-slate-300 uppercase tracking-wider flex items-center gap-2">
-            Activated Neurons (<span id="tableCount">0</span>)
-          </h3>
-          <div class="flex gap-2">
-            <input type="text" id="filterTable" placeholder="Filter neuron ID..." class="text-xs bg-slate-950 border border-slate-700 rounded-lg px-2.5 py-1 text-slate-200 focus:outline-none focus:border-cyan-500 font-mono w-44">
-            <button id="btnExportJson" class="text-xs px-2.5 py-1 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700">Export JSON</button>
+          <!-- Weight Slider -->
+          <div class="space-y-1.5">
+            <div class="flex justify-between items-center text-xs">
+              <label for="sliderWeight" class="font-semibold text-slate-300 flex items-center gap-1.5">
+                <span>Min Synaptic Weight</span>
+                <span class="text-[10px] text-slate-500 font-normal">(Count)</span>
+              </label>
+              <span id="weightVal" class="font-mono text-cyan-400 font-bold bg-cyan-500/10 px-2 py-0.5 rounded border border-cyan-500/20">≥ 2 synapses</span>
+            </div>
+            <input type="range" id="sliderWeight" min="1" max="25" value="2" class="w-full">
+            <p class="text-[10px] text-slate-500">Filters noisy or weak connections to isolate primary signaling circuits.</p>
+          </div>
+
+          <!-- Max Results Slider -->
+          <div class="space-y-1.5">
+            <div class="flex justify-between items-center text-xs">
+              <label for="sliderMaxNodes" class="font-semibold text-slate-300 flex items-center gap-1.5">
+                <span>Results Cap</span>
+              </label>
+              <span id="maxNodesVal" class="font-mono text-purple-400 font-bold bg-purple-500/10 px-2 py-0.5 rounded border border-purple-500/20">2,000 nodes</span>
+            </div>
+            <input type="range" id="sliderMaxNodes" min="100" max="50000" step="100" value="2000" class="w-full">
+            <p class="text-[10px] text-slate-500">Graph visualization limits to 800 nodes for 60fps physics; data table reflects all results.</p>
           </div>
         </div>
-        <div class="max-h-72 overflow-y-auto mt-2">
+
+        <!-- Primary CTA -->
+        <button id="btnTrace" class="w-full bg-gradient-to-r from-emerald-500 via-teal-500 to-cyan-500 hover:from-emerald-400 hover:via-teal-400 hover:to-cyan-400 text-slate-950 font-bold py-3 px-4 rounded-xl shadow-lg shadow-emerald-500/20 flex items-center justify-center gap-2 transition active:scale-[0.98] focus-visible:ring-2 focus-visible:ring-emerald-400 disabled:opacity-50 disabled:cursor-not-allowed">
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M14 5l7 7m0 0l-7 7m7-7H3"/></svg>
+          <span>Trace Downstream Cascade</span>
+        </button>
+      </section>
+
+      <!-- Telemetry Dashboard Card -->
+      <section class="bg-slate-900/80 backdrop-blur-md border border-slate-800/80 rounded-2xl p-5 shadow-2xl space-y-4" aria-live="polite">
+        <div class="flex items-center justify-between border-b border-slate-800 pb-2">
+          <h3 class="text-xs font-bold text-slate-300 uppercase tracking-wider flex items-center gap-2">
+            <svg class="w-3.5 h-3.5 text-cyan-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"/></svg>
+            Execution Telemetry
+          </h3>
+          <span id="telStatusBadge" class="text-[10px] font-mono text-slate-500">Idle</span>
+        </div>
+
+        <div class="grid grid-cols-2 gap-3 text-xs">
+          <div class="p-3 rounded-xl bg-slate-950/70 border border-slate-800/80">
+            <span class="text-[10px] text-slate-400 block uppercase tracking-wider font-semibold">Latency</span>
+            <span id="telLatency" class="text-emerald-400 text-lg font-bold font-mono tracking-tight">--</span>
+          </div>
+          <div class="p-3 rounded-xl bg-slate-950/70 border border-slate-800/80">
+            <span class="text-[10px] text-slate-400 block uppercase tracking-wider font-semibold">Activated</span>
+            <span id="telVisited" class="text-cyan-400 text-lg font-bold font-mono tracking-tight">--</span>
+          </div>
+          <div class="p-3 rounded-xl bg-slate-950/70 border border-slate-800/80">
+            <span class="text-[10px] text-slate-400 block uppercase tracking-wider font-semibold">Max Depth</span>
+            <span id="telDepth" class="text-purple-400 text-lg font-bold font-mono tracking-tight">--</span>
+          </div>
+          <div class="p-3 rounded-xl bg-slate-950/70 border border-slate-800/80">
+            <span class="text-[10px] text-slate-400 block uppercase tracking-wider font-semibold">Synaptic Edges</span>
+            <span id="telEdges" class="text-pink-400 text-lg font-bold font-mono tracking-tight">--</span>
+          </div>
+        </div>
+
+        <!-- Depth Cascade Distribution Histogram -->
+        <div class="space-y-2 pt-2 border-t border-slate-800/80">
+          <span class="text-[11px] font-semibold text-slate-300 block">Propagation by Hop Depth:</span>
+          <div id="depthHistogram" class="space-y-2 font-mono text-xs">
+            <p class="text-slate-600 text-xs italic py-2">Execute a trace to inspect cascade progression.</p>
+          </div>
+        </div>
+      </section>
+    </div>
+
+    <!-- Right Column: Graph Visualizer + Data Table (col-span-8 on lg, 9 on xl) -->
+    <div class="lg:col-span-8 xl:col-span-9 space-y-6 flex flex-col">
+
+      <!-- Interactive Canvas Card -->
+      <section class="bg-slate-900/90 backdrop-blur-md border border-slate-800/80 rounded-2xl overflow-hidden shadow-2xl flex-1 flex flex-col min-h-[580px] relative">
+
+        <!-- Visualizer Toolbar -->
+        <div class="bg-slate-950/90 px-4 py-3 border-b border-slate-800 flex flex-wrap items-center justify-between gap-3 text-xs z-10">
+          <div class="flex items-center space-x-3">
+            <div class="flex items-center gap-1.5">
+              <span class="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse"></span>
+              <span class="font-bold text-slate-200">Force-Directed Neural Cascade</span>
+            </div>
+            <span id="graphNodeCount" class="text-[11px] font-mono text-slate-400 bg-slate-900 px-2 py-0.5 rounded-md border border-slate-800"></span>
+          </div>
+
+          <!-- Controls HUD -->
+          <div class="flex items-center flex-wrap gap-2 text-slate-300">
+            <!-- Depth Legend -->
+            <div class="hidden sm:flex items-center gap-2.5 mr-2 text-[11px]">
+              <span class="flex items-center gap-1"><span class="w-2 h-2 rounded-full bg-emerald-400"></span> Root</span>
+              <span class="flex items-center gap-1"><span class="w-2 h-2 rounded-full bg-cyan-400"></span> Hop 1</span>
+              <span class="flex items-center gap-1"><span class="w-2 h-2 rounded-full bg-blue-500"></span> Hop 2</span>
+              <span class="flex items-center gap-1"><span class="w-2 h-2 rounded-full bg-purple-500"></span> Hop 3+</span>
+            </div>
+
+            <!-- Toolbar buttons -->
+            <label class="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-slate-900 hover:bg-slate-800 border border-slate-700/80 cursor-pointer text-xs transition">
+              <input type="checkbox" id="chkLabels" class="accent-emerald-500 rounded">
+              <span>Labels</span>
+            </label>
+
+            <button id="btnToggleSim" class="px-2.5 py-1 rounded-lg bg-slate-900 hover:bg-slate-800 border border-slate-700/80 text-xs transition active:scale-95 focus-visible:ring-2 focus-visible:ring-emerald-400" title="Pause or Resume physics">
+              <span>⏸ Freeze</span>
+            </button>
+
+            <div class="flex items-center bg-slate-900 border border-slate-700/80 rounded-lg overflow-hidden">
+              <button id="btnZoomIn" class="px-2.5 py-1 hover:bg-slate-800 transition text-slate-300 text-xs font-bold" title="Zoom In" aria-label="Zoom in">+</button>
+              <button id="btnZoomOut" class="px-2.5 py-1 hover:bg-slate-800 transition text-slate-300 text-xs font-bold border-l border-slate-800" title="Zoom Out" aria-label="Zoom out">−</button>
+              <button id="btnResetView" class="px-2.5 py-1 hover:bg-slate-800 transition text-slate-300 text-xs font-medium border-l border-slate-800" title="Center View">Fit</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Canvas Body -->
+        <div class="relative flex-1 bg-slate-950 overflow-hidden select-none">
+          <canvas id="graphCanvas" class="w-full h-full block"></canvas>
+
+          <!-- Empty State / Welcome Overlay -->
+          <div id="canvasOverlay" class="absolute inset-0 flex flex-col items-center justify-center p-6 text-center bg-slate-950/40 backdrop-blur-[2px]">
+            <div class="p-6 rounded-3xl bg-slate-900/90 border border-slate-800 max-w-md shadow-2xl space-y-4 pointer-events-auto">
+              <div class="w-14 h-14 rounded-2xl bg-gradient-to-tr from-emerald-500/20 to-cyan-500/20 text-emerald-400 border border-emerald-500/30 flex items-center justify-center mx-auto shadow-inner">
+                <svg class="w-7 h-7" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.75" d="M13 10V3L4 14h7v7l9-11h-7z"/></svg>
+              </div>
+              <div>
+                <h4 class="font-bold text-white text-base">FlyWire Neural Connectome Explorer</h4>
+                <p class="text-xs text-slate-400 mt-1 leading-relaxed">
+                  Search across 138,639 neurons and 16.8 million synapses with zero-allocation microsecond BFS traversal.
+                </p>
+              </div>
+              <button id="btnQuickStart" class="w-full text-xs font-bold py-2.5 px-4 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 transition active:scale-[0.98] shadow-lg shadow-emerald-500/20 focus-visible:ring-2 focus-visible:ring-emerald-400">
+                Load Top Hub Neuron (3,015 Synapses)
+              </button>
+            </div>
+          </div>
+
+          <!-- Interactive Node Hover Tooltip -->
+          <div id="nodeTooltip" class="absolute hidden pointer-events-none bg-slate-900/95 border border-slate-700/80 rounded-2xl p-3.5 shadow-2xl text-xs font-mono z-30 max-w-xs backdrop-blur-md transition-opacity duration-150">
+            <div id="tooltipContent" class="space-y-1.5"></div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Data Table Card with Filter Tabs -->
+      <section class="bg-slate-900/90 backdrop-blur-md border border-slate-800/80 rounded-2xl p-5 shadow-2xl space-y-4">
+        <div class="flex flex-wrap items-center justify-between gap-3 pb-3 border-b border-slate-800">
+          <div class="flex items-center gap-3">
+            <h3 class="text-xs font-bold text-slate-200 uppercase tracking-wider flex items-center gap-2">
+              <span>Activated Neurons</span>
+              <span id="tableCount" class="px-2 py-0.5 rounded-full bg-slate-800 text-cyan-400 font-mono text-[11px] font-bold border border-slate-700">0</span>
+            </h3>
+
+            <!-- Depth Filter Tabs -->
+            <div id="depthFilterTabs" class="hidden sm:flex items-center gap-1 bg-slate-950 p-1 rounded-xl border border-slate-800 text-[11px]">
+              <button class="tab-btn px-2.5 py-0.5 rounded-lg bg-emerald-500/20 text-emerald-300 font-semibold border border-emerald-500/30" data-depth="all">All</button>
+              <button class="tab-btn px-2.5 py-0.5 rounded-lg text-slate-400 hover:text-slate-200" data-depth="1">Hop 1</button>
+              <button class="tab-btn px-2.5 py-0.5 rounded-lg text-slate-400 hover:text-slate-200" data-depth="2">Hop 2</button>
+              <button class="tab-btn px-2.5 py-0.5 rounded-lg text-slate-400 hover:text-slate-200" data-depth="3+">Hop 3+</button>
+            </div>
+          </div>
+
+          <div class="flex items-center gap-2 w-full sm:w-auto">
+            <div class="relative flex-1 sm:w-56">
+              <input type="text" id="filterTable" placeholder="Search neuron ID..." class="w-full text-xs bg-slate-950 border border-slate-700/80 rounded-xl px-3 py-1.5 text-slate-200 focus:outline-none focus:border-cyan-500 font-mono shadow-inner">
+            </div>
+            <button id="btnExportJson" class="text-xs px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 font-semibold transition active:scale-95 flex items-center gap-1 focus-visible:ring-2 focus-visible:ring-emerald-400">
+              <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/></svg>
+              <span>Export JSON</span>
+            </button>
+          </div>
+        </div>
+
+        <div class="max-h-72 overflow-y-auto rounded-xl border border-slate-800/80">
           <table class="w-full text-left text-xs font-mono">
-            <thead class="text-slate-500 border-b border-slate-800 sticky top-0 bg-slate-900">
+            <thead class="text-slate-400 border-b border-slate-800 sticky top-0 bg-slate-900/95 backdrop-blur z-10">
               <tr>
-                <th class="py-2 px-3">Neuron Root ID</th>
-                <th class="py-2 px-3">Depth</th>
-                <th class="py-2 px-3">Predecessor</th>
-                <th class="py-2 px-3">Synapses</th>
-                <th class="py-2 px-3">Score</th>
-                <th class="py-2 px-3 text-right">Action</th>
+                <th class="py-2.5 px-3.5 font-semibold">FlyWire Root ID</th>
+                <th class="py-2.5 px-3.5 font-semibold">Depth</th>
+                <th class="py-2.5 px-3.5 font-semibold">Predecessor</th>
+                <th class="py-2.5 px-3.5 font-semibold">Synapses</th>
+                <th class="py-2.5 px-3.5 font-semibold">Score</th>
+                <th class="py-2.5 px-3.5 text-right font-semibold">Actions</th>
               </tr>
             </thead>
-            <tbody id="neuronsTableBody" class="divide-y divide-slate-800/60 text-slate-300">
-              <tr><td colspan="6" class="py-6 text-center text-slate-500 italic">No search executed yet.</td></tr>
+            <tbody id="neuronsTableBody" class="divide-y divide-slate-800/50 text-slate-300">
+              <tr><td colspan="6" class="py-8 text-center text-slate-500 italic">No cascade query executed yet.</td></tr>
             </tbody>
           </table>
         </div>
-      </div>
+      </section>
     </div>
   </main>
 
   <script>
-    // ── State ──
+    // ══════════════════════════════════════════════════════════════════
+    //  STATE MANAGEMENT
+    // ══════════════════════════════════════════════════════════════════
     let currentResult = null;
     let sampleNeurons = [];
     let simNodes = [];
@@ -206,63 +431,121 @@
     let hoveredNode = null;
     let simRunning = false;
     let simAlpha = 1.0;
+    let currentDepthFilter = 'all';
 
-    // ── Elements ──
+    const depthColors = ['#10b981', '#06b6d4', '#3b82f6', '#8b5cf6', '#ec4899', '#f97316', '#eab308', '#84cc16'];
+
     const canvas = document.getElementById('graphCanvas');
     const ctx = canvas.getContext('2d');
     const $ = id => document.getElementById(id);
 
-    const depthColors = ['#10b981','#06b6d4','#3b82f6','#8b5cf6','#d946ef','#f43f5e','#f97316','#eab308','#84cc16','#14b8a6'];
+    // ── Toast Utility ──
+    function showToast(message, type = 'info') {
+      const c = $('toastContainer');
+      const t = document.createElement('div');
+      const colors = {
+        success: 'bg-emerald-950/90 border-emerald-500/50 text-emerald-200',
+        error: 'bg-rose-950/90 border-rose-500/50 text-rose-200',
+        info: 'bg-slate-900/90 border-cyan-500/50 text-cyan-200'
+      };
+      t.className = `pointer-events-auto p-3.5 rounded-xl border shadow-xl backdrop-blur-md text-xs font-medium flex items-center justify-between gap-3 transition-all duration-300 opacity-0 translate-y-2 ${colors[type] || colors.info}`;
+      t.innerHTML = `<span>${message}</span><button class="text-slate-400 hover:text-white" onclick="this.parentElement.remove()">&times;</button>`;
+      c.appendChild(t);
+      requestAnimationFrame(() => { t.classList.remove('opacity-0', 'translate-y-2'); });
+      setTimeout(() => {
+        t.classList.add('opacity-0', 'translate-y-2');
+        setTimeout(() => t.remove(), 300);
+      }, 4000);
+    }
 
-    // ── Slider Labels ──
-    $('sliderDepth').oninput = function() { $('depthVal').textContent = this.value; };
-    $('sliderWeight').oninput = function() { $('weightVal').textContent = `≥ ${this.value}`; };
-    $('sliderMaxNodes').oninput = function() { $('maxNodesVal').textContent = Number(this.value).toLocaleString(); };
+    // ── Range Sliders ──
+    $('sliderDepth').oninput = function() { $('depthVal').textContent = `${this.value} hops`; };
+    $('sliderWeight').oninput = function() { $('weightVal').textContent = `≥ ${this.value} synapses`; };
+    $('sliderMaxNodes').oninput = function() { $('maxNodesVal').textContent = `${Number(this.value).toLocaleString()} nodes`; };
 
-    // ── Canvas Sizing ──
+    // ── Canvas Resize ──
     function resizeCanvas() {
-      const r = canvas.parentElement.getBoundingClientRect();
-      canvas.width = r.width;
-      canvas.height = r.height;
+      const rect = canvas.parentElement.getBoundingClientRect();
+      canvas.width = rect.width;
+      canvas.height = rect.height;
       drawGraph();
     }
     window.addEventListener('resize', resizeCanvas);
 
-    // ── Load Stats ──
+    // ── Clear Input Button ──
+    const inputEl = $('inputNeuronId');
+    const btnClear = $('btnClearInput');
+    inputEl.addEventListener('input', () => {
+      btnClear.classList.toggle('hidden', !inputEl.value);
+    });
+    btnClear.onclick = () => {
+      inputEl.value = '';
+      btnClear.classList.add('hidden');
+      inputEl.focus();
+    };
+
+    // ── Load Stats & Sample Pills ──
     async function loadStats() {
       try {
-        const d = await (await fetch('/api/graph/stats')).json();
-        $('statNodes').textContent = d.nodeCount.toLocaleString();
-        $('statEdges').textContent = d.edgeCount.toLocaleString();
-        $('statRam').textContent = `${d.memorySizeMb} MB`;
-        sampleNeurons = d.sampleNeurons || [];
-        renderPills();
-      } catch(e) { console.error(e); }
+        const res = await fetch('/api/graph/stats');
+        const data = await res.json();
+        $('statNodes').textContent = data.nodeCount.toLocaleString();
+        $('statEdges').textContent = `${(data.edgeCount / 1_000_000).toFixed(1)}M`;
+        $('statRam').textContent = `${data.memorySizeMb} MB`;
+        sampleNeurons = data.sampleNeurons || [];
+        renderSamplePills();
+      } catch (e) {
+        showToast('Unable to connect to connectome engine.', 'error');
+      }
     }
 
-    function renderPills() {
+    function renderSamplePills() {
       const el = $('samplePills');
       el.innerHTML = '';
-      sampleNeurons.forEach((s,i) => {
+      sampleNeurons.forEach((s, idx) => {
         const b = document.createElement('button');
-        b.className = 'px-2 py-0.5 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 hover:border-emerald-500/50 transition truncate';
-        b.title = `${s.label} (${s.degree} synapses)`;
-        b.textContent = i === 0 ? `👑 Hub (${s.degree})` : `${String(s.neuronId).slice(-8)} (${s.degree})`;
-        b.onclick = () => { $('inputNeuronId').value = s.neuronId; runTrace(); };
+        const isHub = idx === 0;
+        b.className = `px-2.5 py-1 rounded-xl text-xs font-mono border transition-all active:scale-95 flex items-center gap-1.5 focus-visible:ring-2 focus-visible:ring-emerald-400 ${
+          isHub 
+            ? 'bg-emerald-500/10 border-emerald-500/40 text-emerald-300 hover:bg-emerald-500/20' 
+            : 'bg-slate-900 border-slate-800 text-slate-300 hover:border-slate-700 hover:bg-slate-800'
+        }`;
+        b.innerHTML = isHub 
+          ? `<span>👑 Top Hub</span> <span class="text-[10px] px-1.5 py-0.2 rounded bg-emerald-500/20 text-emerald-300 font-bold">${s.degree} syn</span>`
+          : `<span>...${String(s.neuronId).slice(-6)}</span> <span class="text-[10px] text-slate-500">${s.degree} syn</span>`;
+        b.title = `${s.label} (${s.neuronId}) - ${s.degree} outgoing synapses`;
+        b.onclick = () => {
+          inputEl.value = s.neuronId;
+          btnClear.classList.remove('hidden');
+          runTrace();
+        };
         el.appendChild(b);
       });
     }
 
     $('btnQuickStart').onclick = () => {
-      if (sampleNeurons.length) { $('inputNeuronId').value = sampleNeurons[0].neuronId; runTrace(); }
+      if (sampleNeurons.length) {
+        inputEl.value = sampleNeurons[0].neuronId;
+        btnClear.classList.remove('hidden');
+        runTrace();
+      }
     };
 
-    // ── Trace ──
+    // ── Trace BFS Execution ──
     async function runTrace() {
-      const rawId = $('inputNeuronId').value.trim();
-      if (!rawId) return alert('Enter a neuron ID.');
-      $('btnTrace').disabled = true;
-      $('btnTrace').innerHTML = '<span class="animate-spin inline-block w-4 h-4 border-2 border-slate-950 border-t-transparent rounded-full mr-2"></span>Tracing...';
+      const rawId = inputEl.value.trim();
+      if (!rawId) {
+        showToast('Please enter or select a source Neuron ID.', 'error');
+        inputEl.focus();
+        return;
+      }
+
+      const btn = $('btnTrace');
+      btn.disabled = true;
+      btn.innerHTML = `<span class="animate-spin inline-block w-4 h-4 border-2 border-slate-950 border-t-transparent rounded-full mr-2"></span>Tracing Cascade...`;
+      $('telStatusBadge').textContent = 'Searching...';
+      $('telStatusBadge').className = 'text-[10px] font-mono text-emerald-400 animate-pulse';
+
       try {
         const res = await fetch('/api/trace/bfs', {
           method: 'POST',
@@ -274,122 +557,243 @@
             maxResults: +$('sliderMaxNodes').value
           })
         });
+
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
         const data = await res.json();
         currentResult = data;
-        if (!data.foundSource) return alert(`Neuron '${rawId}' not found.`);
+
+        if (!data.foundSource) {
+          showToast(`Neuron ID '${rawId}' was not found in the connectome dataset.`, 'error');
+          $('telStatusBadge').textContent = 'Not Found';
+          $('telStatusBadge').className = 'text-[10px] font-mono text-rose-400';
+          return;
+        }
+
         $('canvasOverlay').classList.add('hidden');
+        $('telStatusBadge').textContent = 'Success';
+        $('telStatusBadge').className = 'text-[10px] font-mono text-emerald-400';
+
         renderTelemetry(data);
-        renderTable(data.activatedNeurons);
+        applyTableFilter();
         buildForceGraph(data);
-      } catch(e) { alert('Error: ' + e.message); }
-      finally {
-        $('btnTrace').disabled = false;
-        $('btnTrace').innerHTML = '<svg class="w-5 h-5 inline mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14 5l7 7m0 0l-7 7m7-7H3"/></svg> Trace Downstream Activation';
+        showToast(`Traced ${data.totalVisited.toLocaleString()} neurons in ${(data.elapsedMicroseconds / 1000).toFixed(2)} ms`, 'success');
+
+      } catch (err) {
+        showToast(`Trace error: ${err.message}`, 'error');
+        $('telStatusBadge').textContent = 'Error';
+        $('telStatusBadge').className = 'text-[10px] font-mono text-rose-400';
+      } finally {
+        btn.disabled = false;
+        btn.innerHTML = `<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M14 5l7 7m0 0l-7 7m7-7H3"/></svg><span>Trace Downstream Cascade</span>`;
       }
     }
-    $('btnTrace').onclick = runTrace;
-    $('inputNeuronId').addEventListener('keydown', e => { if (e.key === 'Enter') runTrace(); });
 
-    // ── Benchmark ──
+    $('btnTrace').onclick = runTrace;
+    inputEl.addEventListener('keydown', e => { if (e.key === 'Enter') runTrace(); });
+
+    // ── Benchmark Dialog ──
     $('btnBenchmark').onclick = async () => {
-      $('btnBenchmark').disabled = true;
-      $('btnBenchmark').textContent = 'Running...';
+      const btn = $('btnBenchmark');
+      btn.disabled = true;
+      btn.innerHTML = `<span class="animate-spin inline-block w-3.5 h-3.5 border-2 border-purple-400 border-t-transparent rounded-full mr-1.5"></span><span>Benchmarking...</span>`;
+
       try {
-        const d = await (await fetch('/api/benchmark', { method: 'POST' })).json();
-        alert(`⚡ BFS Benchmark (${d.iterations} iterations):\n\n• p50: ${d.p50Us} µs (${d.p50Ms} ms)\n• p95: ${d.p95Us} µs (${d.p95Ms} ms)\n• Fastest: ${d.minUs} µs\n• Avg Nodes: ${d.avgNodesVisited}`);
-      } catch(e) { alert('Failed: ' + e.message); }
-      finally { $('btnBenchmark').disabled = false; $('btnBenchmark').textContent = '⚡ Benchmark'; }
+        const res = await fetch('/api/benchmark', { method: 'POST' });
+        const d = await res.json();
+
+        $('benchmarkModalContent').innerHTML = `
+          <div class="grid grid-cols-3 gap-3 font-mono text-center">
+            <div class="p-3 bg-slate-950 rounded-xl border border-slate-800">
+              <span class="text-[10px] text-slate-500 uppercase block font-sans">p50 Latency</span>
+              <span class="text-emerald-400 text-lg font-bold">${d.p50Us} µs</span>
+              <span class="text-[10px] text-slate-400 block">${d.p50Ms} ms</span>
+            </div>
+            <div class="p-3 bg-slate-950 rounded-xl border border-slate-800">
+              <span class="text-[10px] text-slate-500 uppercase block font-sans">p95 Latency</span>
+              <span class="text-cyan-400 text-lg font-bold">${d.p95Us} µs</span>
+              <span class="text-[10px] text-slate-400 block">${d.p95Ms} ms</span>
+            </div>
+            <div class="p-3 bg-slate-950 rounded-xl border border-slate-800">
+              <span class="text-[10px] text-slate-500 uppercase block font-sans">p99 Latency</span>
+              <span class="text-purple-400 text-lg font-bold">${d.p99Us} µs</span>
+              <span class="text-[10px] text-slate-400 block">${(d.p99Us/1000).toFixed(2)} ms</span>
+            </div>
+          </div>
+          <div class="space-y-2 text-xs font-mono bg-slate-950/60 p-3.5 rounded-xl border border-slate-800/80">
+            <div class="flex justify-between text-slate-400">
+              <span>Benchmark Queries:</span>
+              <span class="text-white font-bold">${d.iterations} runs</span>
+            </div>
+            <div class="flex justify-between text-slate-400">
+              <span>Avg Neurons Visited / Query:</span>
+              <span class="text-cyan-300 font-bold">${d.avgNodesVisited.toLocaleString()} nodes</span>
+            </div>
+            <div class="flex justify-between text-slate-400">
+              <span>Fastest Query:</span>
+              <span class="text-emerald-300 font-bold">${d.minUs} µs</span>
+            </div>
+          </div>
+        `;
+        $('benchmarkModal').showModal();
+      } catch (e) {
+        showToast('Benchmark failed: ' + e.message, 'error');
+      } finally {
+        btn.disabled = false;
+        btn.innerHTML = `<span>⚡</span> <span class="hidden sm:inline">Benchmark</span>`;
+      }
     };
 
-    // ── Telemetry ──
-    function renderTelemetry(d) {
-      $('telLatency').textContent = `${(d.elapsedMicroseconds/1000).toFixed(2)} ms`;
-      $('telVisited').textContent = d.totalVisited.toLocaleString();
-      $('telDepth').textContent = `${d.maxDepthReached} hops`;
-      $('telEdges').textContent = (d.edges?.length || 0).toLocaleString();
-      const hist = d.depthHistogram || {};
-      const maxC = Math.max(...Object.values(hist), 1);
+    // ── Telemetry Rendering ──
+    function renderTelemetry(data) {
+      $('telLatency').textContent = `${(data.elapsedMicroseconds / 1000).toFixed(2)} ms`;
+      $('telVisited').textContent = data.totalVisited.toLocaleString();
+      $('telDepth').textContent = `${data.maxDepthReached} hops`;
+      $('telEdges').textContent = (data.edges?.length || 0).toLocaleString();
+
+      const hist = data.depthHistogram || {};
+      const maxCount = Math.max(...Object.values(hist), 1);
+
       $('depthHistogram').innerHTML = Object.entries(hist).map(([depth, count]) => {
-        const pct = Math.max(5, count / maxC * 100);
+        const pct = Math.max(8, (count / maxCount) * 100);
         const col = depthColors[depth] || '#ec4899';
-        return `<div class="flex items-center gap-2 text-[11px]">
-          <span class="w-12 text-slate-400">Hop ${depth}:</span>
-          <div class="flex-1 bg-slate-950 rounded-full h-2 overflow-hidden"><div class="h-full rounded-full" style="width:${pct}%;background:${col}"></div></div>
-          <span class="w-14 text-right text-slate-300">${count.toLocaleString()}</span>
-        </div>`;
+        return `
+          <div class="space-y-1">
+            <div class="flex justify-between text-[11px]">
+              <span class="text-slate-400 font-medium">Hop ${depth}</span>
+              <span class="text-slate-300 font-bold">${count.toLocaleString()} neurons</span>
+            </div>
+            <div class="w-full bg-slate-950 rounded-full h-2 overflow-hidden border border-slate-800">
+              <div class="h-full rounded-full transition-all duration-500 ease-out" style="width: ${pct}%; background-color: ${col}"></div>
+            </div>
+          </div>
+        `;
       }).join('');
     }
 
-    // ── Table ──
+    // ── Data Table Tabs & Rendering ──
+    document.querySelectorAll('#depthFilterTabs .tab-btn').forEach(btn => {
+      btn.onclick = () => {
+        document.querySelectorAll('#depthFilterTabs .tab-btn').forEach(b => {
+          b.className = 'tab-btn px-2.5 py-0.5 rounded-lg text-slate-400 hover:text-slate-200';
+        });
+        btn.className = 'tab-btn px-2.5 py-0.5 rounded-lg bg-emerald-500/20 text-emerald-300 font-semibold border border-emerald-500/30';
+        currentDepthFilter = btn.dataset.depth;
+        applyTableFilter();
+      };
+    });
+
+    $('filterTable').oninput = applyTableFilter;
+
+    function applyTableFilter() {
+      if (!currentResult?.activatedNeurons) return;
+      const q = $('filterTable').value.trim();
+      let list = currentResult.activatedNeurons;
+
+      if (currentDepthFilter !== 'all') {
+        if (currentDepthFilter === '3+') list = list.filter(n => n.depth >= 3);
+        else list = list.filter(n => n.depth === parseInt(currentDepthFilter));
+      }
+
+      if (q) list = list.filter(n => n.neuronId.toString().includes(q));
+      renderTable(list);
+    }
+
     function renderTable(neurons) {
       $('tableCount').textContent = (neurons || []).length.toLocaleString();
       const tb = $('neuronsTableBody');
-      if (!neurons?.length) { tb.innerHTML = '<tr><td colspan="6" class="py-4 text-center text-slate-500">No neurons activated.</td></tr>'; return; }
+      if (!neurons?.length) {
+        tb.innerHTML = '<tr><td colspan="6" class="py-6 text-center text-slate-500 italic">No matching neurons found in cascade.</td></tr>';
+        return;
+      }
+
       tb.innerHTML = '';
-      const show = neurons.slice(0, 200);
-      show.forEach(n => {
+      const slice = neurons.slice(0, 250);
+
+      slice.forEach(n => {
         const col = depthColors[n.depth] || '#ec4899';
         const tr = document.createElement('tr');
-        tr.className = 'hover:bg-slate-800/40 transition cursor-pointer';
+        tr.className = 'hover:bg-slate-800/40 transition group';
         tr.innerHTML = `
-          <td class="py-1.5 px-3 text-white font-semibold flex items-center gap-1.5"><span class="w-2 h-2 rounded-full flex-shrink-0" style="background:${col}"></span>${n.neuronId}</td>
-          <td class="py-1.5 px-3 text-slate-300">${n.depth}</td>
-          <td class="py-1.5 px-3 text-slate-400">${n.predecessorId || '-'}</td>
-          <td class="py-1.5 px-3 text-cyan-400 font-bold">${n.synapseWeight || '-'}</td>
-          <td class="py-1.5 px-3 text-emerald-400">${n.activationScore}</td>
-          <td class="py-1.5 px-3 text-right"><button class="px-2 py-0.5 rounded bg-slate-800 hover:bg-emerald-500 hover:text-slate-950 text-slate-400 text-[10px] transition tb-trace">Trace →</button></td>`;
-        tr.querySelector('.tb-trace').onclick = e => { e.stopPropagation(); $('inputNeuronId').value = n.neuronId; runTrace(); };
+          <td class="py-2 px-3.5 text-white font-semibold flex items-center gap-2">
+            <span class="w-2 h-2 rounded-full flex-shrink-0" style="background:${col}"></span>
+            <span class="neuron-id-text">${n.neuronId}</span>
+            <button class="opacity-0 group-hover:opacity-100 text-slate-500 hover:text-slate-300 transition text-[10px] p-0.5 copy-id-btn" title="Copy FlyWire ID">📋</button>
+          </td>
+          <td class="py-2 px-3.5"><span class="px-2 py-0.5 rounded-md text-[10px] font-bold" style="background:${col}20; color:${col}">${n.depth}</span></td>
+          <td class="py-2 px-3.5 text-slate-400">${n.predecessorId || '—'}</td>
+          <td class="py-2 px-3.5 text-cyan-400 font-bold">${n.synapseWeight || '—'}</td>
+          <td class="py-2 px-3.5 text-emerald-400">${n.activationScore}</td>
+          <td class="py-2 px-3.5 text-right">
+            <button class="px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-emerald-500 hover:text-slate-950 text-slate-300 text-[11px] font-semibold transition active:scale-95 btn-inline-trace">
+              Trace →
+            </button>
+          </td>
+        `;
+
+        tr.querySelector('.copy-id-btn').onclick = () => {
+          navigator.clipboard.writeText(n.neuronId.toString());
+          showToast(`Copied ${n.neuronId} to clipboard`, 'info');
+        };
+
+        tr.querySelector('.btn-inline-trace').onclick = () => {
+          inputEl.value = n.neuronId;
+          btnClear.classList.remove('hidden');
+          runTrace();
+        };
+
         tb.appendChild(tr);
       });
-      if (neurons.length > 200) {
+
+      if (neurons.length > 250) {
         const tr = document.createElement('tr');
-        tr.innerHTML = `<td colspan="6" class="py-2 text-center text-slate-500 text-xs italic">Showing 200 of ${neurons.length.toLocaleString()}. Export JSON for full data.</td>`;
+        tr.innerHTML = `<td colspan="6" class="py-3 text-center text-slate-500 text-xs italic bg-slate-950/40">Showing top 250 of ${neurons.length.toLocaleString()} neurons. Use Export JSON for full dataset.</td>`;
         tb.appendChild(tr);
       }
     }
 
-    $('filterTable').oninput = function() {
-      const q = this.value.trim();
-      if (!currentResult?.activatedNeurons) return;
-      renderTable(currentResult.activatedNeurons.filter(n => n.neuronId.toString().includes(q)));
-    };
-
     $('btnExportJson').onclick = () => {
-      if (!currentResult) return;
-      const b = new Blob([JSON.stringify(currentResult, null, 2)], { type: 'application/json' });
-      const a = document.createElement('a'); a.href = URL.createObjectURL(b);
-      a.download = `neuron_${currentResult.sourceNeuronId}_cascade.json`; a.click();
+      if (!currentResult) {
+        showToast('No active trace data to export.', 'error');
+        return;
+      }
+      const blob = new Blob([JSON.stringify(currentResult, null, 2)], { type: 'application/json' });
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = `neuron_${currentResult.sourceNeuronId}_cascade.json`;
+      a.click();
+      showToast('Exported cascade dataset.', 'success');
     };
 
     // ══════════════════════════════════════════════════════════════════
-    //  FORCE-DIRECTED GRAPH SIMULATION
+    //  FORCE-DIRECTED GRAPH PHYSICS SIMULATION
     // ══════════════════════════════════════════════════════════════════
-
     function buildForceGraph(data) {
       const neurons = data.activatedNeurons || [];
       const edges = data.edges || [];
 
-      // Cap visual nodes for canvas performance; table shows all
       const VIZ_CAP = 800;
       const vizNeurons = neurons.slice(0, VIZ_CAP);
       const vizIds = new Set(vizNeurons.map(n => n.neuronId.toString()));
 
       const nodeMap = new Map();
-      const cx = canvas.width / 2, cy = canvas.height / 2;
+      const cx = canvas.width / 2;
+      const cy = canvas.height / 2;
 
       simNodes = vizNeurons.map((n, i) => {
-        // Initial position: jittered concentric placement
         const depth = n.depth;
-        const angle = i * 2.399 + depth * 1.3; // golden angle spiral
-        const r = depth === 0 ? 0 : (40 + depth * 50 + Math.random() * 30);
+        const angle = i * 2.39996 + depth * 1.4;
+        const radiusDist = depth === 0 ? 0 : (45 + depth * 55 + Math.random() * 25);
         const node = {
           id: n.neuronId.toString(),
-          depth, x: cx + Math.cos(angle) * r, y: cy + Math.sin(angle) * r,
-          vx: 0, vy: 0,
-          radius: depth === 0 ? 10 : Math.max(3, 8 - depth * 0.7),
+          depth,
+          x: cx + Math.cos(angle) * radiusDist,
+          y: cy + Math.sin(angle) * radiusDist,
+          vx: 0,
+          vy: 0,
+          radius: depth === 0 ? 11 : Math.max(3.5, 8.5 - depth * 0.8),
           color: depthColors[depth] || '#ec4899',
           data: n,
-          mass: depth === 0 ? 3 : 1
+          mass: depth === 0 ? 4 : 1
         };
         nodeMap.set(node.id, node);
         return node;
@@ -397,22 +801,21 @@
 
       simEdges = [];
       edges.forEach(e => {
-        const sid = e.sourceId.toString(), tid = e.targetId.toString();
+        const sid = e.sourceId.toString();
+        const tid = e.targetId.toString();
         if (vizIds.has(sid) && vizIds.has(tid)) {
-          const u = nodeMap.get(sid), v = nodeMap.get(tid);
+          const u = nodeMap.get(sid);
+          const v = nodeMap.get(tid);
           if (u && v) simEdges.push({ source: u, target: v, weight: e.weight, depth: e.depth });
         }
       });
 
-      $('graphNodeCount').textContent = `(${simNodes.length} nodes, ${simEdges.length} edges${neurons.length > VIZ_CAP ? ` — showing ${VIZ_CAP} of ${neurons.length}` : ''})`;
-
-      // Build adjacency for repulsion optimization
-      simNodes.forEach(n => { n.neighbors = []; });
-      simEdges.forEach(e => { e.source.neighbors.push(e.target); e.target.neighbors.push(e.source); });
+      $('graphNodeCount').textContent = `${simNodes.length} nodes, ${simEdges.length} edges${neurons.length > VIZ_CAP ? ` (${VIZ_CAP} rendered)` : ''}`;
 
       camera = { x: 0, y: 0, zoom: 1 };
       simAlpha = 1.0;
       simRunning = true;
+      $('btnToggleSim').innerHTML = '<span>⏸ Freeze</span>';
       requestAnimationFrame(simulationLoop);
     }
 
@@ -421,17 +824,18 @@
 
       const N = simNodes.length;
       const dt = 0.3;
-      const repulsion = 1200;
-      const attraction = 0.008;
-      const damping = 0.88;
-      const cx = canvas.width / 2, cy = canvas.height / 2;
+      const repulsion = 1400;
+      const attraction = 0.009;
+      const damping = 0.86;
+      const cx = canvas.width / 2;
+      const cy = canvas.height / 2;
 
-      // Repulsion (Barnes-Hut would be better for >2k nodes, but for ≤800 this is fine)
       for (let i = 0; i < N; i++) {
         const a = simNodes[i];
         for (let j = i + 1; j < N; j++) {
           const b = simNodes[j];
-          let dx = a.x - b.x, dy = a.y - b.y;
+          let dx = a.x - b.x;
+          let dy = a.y - b.y;
           let d2 = dx * dx + dy * dy;
           if (d2 < 1) d2 = 1;
           const f = (repulsion * simAlpha) / d2;
@@ -441,41 +845,54 @@
         }
       }
 
-      // Attraction along edges
       simEdges.forEach(e => {
-        let dx = e.target.x - e.source.x, dy = e.target.y - e.source.y;
+        let dx = e.target.x - e.source.x;
+        let dy = e.target.y - e.source.y;
         const d = Math.sqrt(dx * dx + dy * dy) || 1;
-        const idealLen = 60 + (e.depth || 1) * 20;
-        const f = (d - idealLen) * attraction * simAlpha * Math.min(e.weight, 10);
+        const idealLen = 65 + (e.depth || 1) * 22;
+        const f = (d - idealLen) * attraction * simAlpha * Math.min(e.weight, 12);
         const fx = (dx / d) * f, fy = (dy / d) * f;
         e.source.vx += fx; e.source.vy += fy;
         e.target.vx -= fx; e.target.vy -= fy;
       });
 
-      // Centering gravity
       simNodes.forEach(n => {
-        n.vx += (cx - n.x) * 0.0005 * simAlpha;
-        n.vy += (cy - n.y) * 0.0005 * simAlpha;
+        n.vx += (cx - n.x) * 0.0006 * simAlpha;
+        n.vy += (cy - n.y) * 0.0006 * simAlpha;
       });
 
-      // Velocity integration
       simNodes.forEach(n => {
-        if (n.depth === 0) { n.x = cx; n.y = cy; n.vx = 0; n.vy = 0; return; } // pin root
+        if (n.depth === 0) { n.x = cx; n.y = cy; n.vx = 0; n.vy = 0; return; }
         n.vx *= damping; n.vy *= damping;
         n.x += n.vx * dt; n.y += n.vy * dt;
       });
 
-      simAlpha *= 0.992;
+      simAlpha *= 0.993;
       drawGraph();
 
-      if (simAlpha > 0.005) requestAnimationFrame(simulationLoop);
-      else simRunning = false;
+      if (simAlpha > 0.004) requestAnimationFrame(simulationLoop);
+      else {
+        simRunning = false;
+        $('btnToggleSim').innerHTML = '<span>▶ Resume</span>';
+      }
     }
 
-    // ── Drawing ──
+    $('btnToggleSim').onclick = () => {
+      simRunning = !simRunning;
+      if (simRunning) {
+        simAlpha = 0.5;
+        $('btnToggleSim').innerHTML = '<span>⏸ Freeze</span>';
+        requestAnimationFrame(simulationLoop);
+      } else {
+        $('btnToggleSim').innerHTML = '<span>▶ Resume</span>';
+      }
+    };
+
+    // ── Graph Drawing ──
     function drawGraph() {
       ctx.clearRect(0, 0, canvas.width, canvas.height);
       if (simNodes.length === 0) return;
+
       ctx.save();
       ctx.translate(canvas.width / 2 + camera.x, canvas.height / 2 + camera.y);
       ctx.scale(camera.zoom, camera.zoom);
@@ -483,56 +900,58 @@
 
       const showLabels = $('chkLabels').checked;
 
-      // Edges
-      ctx.lineWidth = 0.5;
+      // Draw Edges
       simEdges.forEach(e => {
         ctx.beginPath();
         ctx.moveTo(e.source.x, e.source.y);
         ctx.lineTo(e.target.x, e.target.y);
-        const alpha = Math.min(0.6, 0.1 + (e.weight / 30));
+        const alpha = Math.min(0.65, 0.15 + (e.weight / 25));
         ctx.strokeStyle = `rgba(100, 116, 139, ${alpha})`;
-        ctx.lineWidth = Math.min(2, 0.3 + Math.log2(e.weight || 1) * 0.4);
+        ctx.lineWidth = Math.min(2.5, 0.4 + Math.log2(e.weight || 1) * 0.45);
         ctx.stroke();
       });
 
-      // Nodes
+      // Draw Nodes
       simNodes.forEach(n => {
         ctx.beginPath();
         ctx.arc(n.x, n.y, n.radius, 0, Math.PI * 2);
         ctx.fillStyle = n.color;
         ctx.fill();
+
         if (n.depth === 0) {
-          ctx.strokeStyle = 'rgba(16, 185, 129, 0.35)';
+          ctx.strokeStyle = 'rgba(16, 185, 129, 0.4)';
           ctx.lineWidth = 6; ctx.stroke();
           ctx.strokeStyle = 'rgba(16, 185, 129, 0.15)';
-          ctx.lineWidth = 12; ctx.stroke();
+          ctx.lineWidth = 14; ctx.stroke();
         }
       });
 
-      // Labels
+      // Draw Labels
       if (showLabels && camera.zoom > 0.6) {
         ctx.font = `${Math.round(9 / camera.zoom)}px JetBrains Mono, monospace`;
-        ctx.fillStyle = 'rgba(148, 163, 184, 0.7)';
+        ctx.fillStyle = 'rgba(203, 213, 225, 0.85)';
         simNodes.forEach(n => {
-          if (n.depth <= 1 || camera.zoom > 1.2) {
+          if (n.depth <= 1 || camera.zoom > 1.3) {
             ctx.fillText(n.id.slice(-6), n.x + n.radius + 3, n.y + 3);
           }
         });
       }
 
-      // Hovered node highlight
+      // Highlight Hovered Node & Direct Connections
       if (hoveredNode) {
         ctx.beginPath();
-        ctx.arc(hoveredNode.x, hoveredNode.y, hoveredNode.radius + 5, 0, Math.PI * 2);
-        ctx.strokeStyle = '#fff'; ctx.lineWidth = 2; ctx.stroke();
-        // Highlight connected edges
-        ctx.lineWidth = 1.5;
+        ctx.arc(hoveredNode.x, hoveredNode.y, hoveredNode.radius + 6, 0, Math.PI * 2);
+        ctx.strokeStyle = '#ffffff';
+        ctx.lineWidth = 2.5;
+        ctx.stroke();
+
         simEdges.forEach(e => {
           if (e.source === hoveredNode || e.target === hoveredNode) {
             ctx.beginPath();
             ctx.moveTo(e.source.x, e.source.y);
             ctx.lineTo(e.target.x, e.target.y);
-            ctx.strokeStyle = 'rgba(16, 185, 129, 0.8)';
+            ctx.strokeStyle = 'rgba(16, 185, 129, 0.95)';
+            ctx.lineWidth = 2.5;
             ctx.stroke();
           }
         });
@@ -541,7 +960,7 @@
       ctx.restore();
     }
 
-    // ── Mouse Interaction ──
+    // ── Mouse & Zoom Controls ──
     function screenToWorld(sx, sy) {
       return {
         x: (sx - canvas.width / 2 - camera.x) / camera.zoom + canvas.width / 2,
@@ -549,32 +968,56 @@
       };
     }
 
-    canvas.onmousedown = e => { isDragging = true; dragStart = { x: e.clientX - camera.x, y: e.clientY - camera.y }; };
-    window.onmouseup = () => { isDragging = false; };
+    canvas.onmousedown = e => {
+      isDragging = true;
+      dragStart = { x: e.clientX - camera.x, y: e.clientY - camera.y };
+      canvas.classList.add('dragging');
+    };
+
+    window.onmouseup = () => {
+      isDragging = false;
+      canvas.classList.remove('dragging');
+    };
+
     window.onmousemove = e => {
-      if (isDragging) { camera.x = e.clientX - dragStart.x; camera.y = e.clientY - dragStart.y; drawGraph(); return; }
+      if (isDragging) {
+        camera.x = e.clientX - dragStart.x;
+        camera.y = e.clientY - dragStart.y;
+        drawGraph();
+        return;
+      }
+
       const r = canvas.getBoundingClientRect();
       const w = screenToWorld(e.clientX - r.left, e.clientY - r.top);
       let found = null;
       for (const n of simNodes) {
         const dx = n.x - w.x, dy = n.y - w.y;
-        if (dx * dx + dy * dy <= (n.radius + 4) ** 2) { found = n; break; }
+        if (dx * dx + dy * dy <= (n.radius + 5) ** 2) { found = n; break; }
       }
+
       if (found !== hoveredNode) {
-        hoveredNode = found; drawGraph();
+        hoveredNode = found;
+        drawGraph();
         if (hoveredNode) {
           $('nodeTooltip').classList.remove('hidden');
-          $('nodeTooltip').style.left = (e.clientX - r.left + 14) + 'px';
-          $('nodeTooltip').style.top = (e.clientY - r.top + 14) + 'px';
+          $('nodeTooltip').style.left = Math.min(window.innerWidth - 300, e.clientX - r.left + 16) + 'px';
+          $('nodeTooltip').style.top = Math.min(window.innerHeight - 200, e.clientY - r.top + 16) + 'px';
           const d = hoveredNode.data;
           $('tooltipContent').innerHTML = `
-            <div class="text-white font-bold text-sm">${hoveredNode.id}</div>
-            <div class="text-slate-400">Depth: <span class="text-cyan-400 font-semibold">Hop ${d.depth}</span></div>
-            ${d.predecessorId ? `<div class="text-slate-400">From: <span class="text-slate-300">${d.predecessorId}</span></div>` : ''}
-            ${d.synapseWeight ? `<div class="text-slate-400">Weight: <span class="text-emerald-400 font-semibold">${d.synapseWeight}</span></div>` : ''}
-            <div class="text-slate-400">Score: <span class="text-purple-400">${d.activationScore}</span></div>
-            <div class="text-[10px] text-slate-500 pt-1 border-t border-slate-700 mt-1">Click to trace from this neuron</div>`;
-        } else { $('nodeTooltip').classList.add('hidden'); }
+            <div class="text-white font-bold text-sm border-b border-slate-700/80 pb-1 flex items-center justify-between">
+              <span>${hoveredNode.id}</span>
+              <span class="text-[10px] px-1.5 py-0.5 rounded" style="background:${hoveredNode.color}20; color:${hoveredNode.color}">Hop ${d.depth}</span>
+            </div>
+            ${d.predecessorId ? `<div class="text-slate-400">Predecessor: <span class="text-slate-200 font-mono">${d.predecessorId}</span></div>` : ''}
+            ${d.synapseWeight ? `<div class="text-slate-400">Synapse Weight: <span class="text-cyan-400 font-bold">${d.synapseWeight}</span></div>` : ''}
+            <div class="text-slate-400">Activation Score: <span class="text-emerald-400 font-bold">${d.activationScore}</span></div>
+            <div class="text-[10px] text-slate-500 pt-1.5 border-t border-slate-800 flex justify-between items-center">
+              <span>Click to re-trace cascade</span>
+            </div>
+          `;
+        } else {
+          $('nodeTooltip').classList.add('hidden');
+        }
       }
     };
 
@@ -584,10 +1027,20 @@
       drawGraph();
     };
 
-    canvas.onclick = () => { if (hoveredNode) { $('inputNeuronId').value = hoveredNode.id; runTrace(); } };
-    $('btnResetView').onclick = () => { camera = { x: 0, y: 0, zoom: 1 }; drawGraph(); };
+    canvas.onclick = () => {
+      if (hoveredNode) {
+        inputEl.value = hoveredNode.id;
+        btnClear.classList.remove('hidden');
+        runTrace();
+      }
+    };
 
-    // ── Init ──
+    $('btnZoomIn').onclick = () => { camera.zoom = Math.min(8, camera.zoom * 1.25); drawGraph(); };
+    $('btnZoomOut').onclick = () => { camera.zoom = Math.max(0.15, camera.zoom / 1.25); drawGraph(); };
+    $('btnResetView').onclick = () => { camera = { x: 0, y: 0, zoom: 1 }; drawGraph(); };
+    $('chkLabels').onchange = drawGraph;
+
+    // ── Startup Initialization ──
     resizeCanvas();
     loadStats();
   </script>
