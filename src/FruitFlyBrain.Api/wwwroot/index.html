@@ -1,0 +1,729 @@
+<!DOCTYPE html>
+<html lang="en" class="dark">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Fruit Fly Brain Connectome - Neural Cascade Tracer</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          colors: {
+            brand: {
+              50: '#ecfdf5',
+              500: '#10b981',
+              600: '#059669',
+              900: '#064e3b'
+            }
+          }
+        }
+      }
+    }
+  </script>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600;700&family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap');
+    body {
+      font-family: 'Plus Jakarta Sans', sans-serif;
+    }
+    code, pre, .mono {
+      font-family: 'JetBrains Mono', monospace;
+    }
+    canvas {
+      cursor: grab;
+    }
+    canvas:active {
+      cursor: grabbing;
+    }
+  </style>
+</head>
+<body class="bg-slate-950 text-slate-100 min-h-screen flex flex-col">
+
+  <!-- Header -->
+  <header class="border-b border-slate-800 bg-slate-900/60 backdrop-blur sticky top-0 z-50">
+    <div class="max-w-7xl mx-auto px-4 py-3 flex flex-wrap items-center justify-between gap-4">
+      <div class="flex items-center space-x-3">
+        <div class="w-10 h-10 rounded-xl bg-gradient-to-tr from-emerald-500 to-cyan-500 flex items-center justify-center shadow-lg shadow-emerald-500/20">
+          <svg class="w-6 h-6 text-slate-950" fill="currentColor" viewBox="0 0 24 24">
+            <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 17.93c-3.95-.49-7-3.85-7-7.93 0-.62.08-1.21.21-1.79L9 15v1c0 1.1.9 2 2 2v1.93zm6.9-2.54c-.26-.81-1-1.39-1.9-1.39h-1v-3c0-.55-.45-1-1-1H8v-2h2c.55 0 1-.45 1-1V7h2c1.1 0 2-.9 2-2v-.41c2.93 1.19 5 4.06 5 7.41 0 2.08-.8 3.97-2.1 5.39z"/>
+          </svg>
+        </div>
+        <div>
+          <h1 class="text-lg font-bold tracking-tight text-white flex items-center gap-2">
+            Fruit Fly Brain Connectome
+            <span class="text-xs px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/30">FlyWire v783</span>
+          </h1>
+          <p class="text-xs text-slate-400">High-Performance Neural Activation Cascade Search (CSR + Zero-Allocation BFS)</p>
+        </div>
+      </div>
+
+      <!-- Connectome Live Stats -->
+      <div id="statsBar" class="flex items-center gap-4 text-xs font-mono">
+        <div class="px-3 py-1.5 rounded-lg bg-slate-800/80 border border-slate-700">
+          <span class="text-slate-400">Neurons:</span> <span id="statNodes" class="text-emerald-400 font-bold">138,639</span>
+        </div>
+        <div class="px-3 py-1.5 rounded-lg bg-slate-800/80 border border-slate-700">
+          <span class="text-slate-400">Synapses:</span> <span id="statEdges" class="text-cyan-400 font-bold">16,847,997</span>
+        </div>
+        <div class="px-3 py-1.5 rounded-lg bg-slate-800/80 border border-slate-700">
+          <span class="text-slate-400">CSR RAM:</span> <span id="statRam" class="text-purple-400 font-bold">98.5 MB</span>
+        </div>
+        <div class="flex items-center gap-1.5 text-emerald-400">
+          <span class="relative flex h-2.5 w-2.5">
+            <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+            <span class="relative inline-flex rounded-full h-2.5 w-2.5 bg-emerald-500"></span>
+          </span>
+          <span>Online</span>
+        </div>
+      </div>
+    </div>
+  </header>
+
+  <!-- Main Content -->
+  <main class="flex-1 max-w-7xl w-full mx-auto p-4 grid grid-cols-1 lg:grid-cols-12 gap-6">
+
+    <!-- Left Controls Panel -->
+    <div class="lg:col-span-4 space-y-4">
+      <div class="bg-slate-900 border border-slate-800 rounded-2xl p-5 shadow-xl space-y-5">
+        <div class="border-b border-slate-800 pb-3 flex items-center justify-between">
+          <h2 class="font-semibold text-sm text-slate-200 uppercase tracking-wider flex items-center gap-2">
+            <svg class="w-4 h-4 text-emerald-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"/></svg>
+            Trace Configuration
+          </h2>
+          <button id="btnBenchmark" class="text-xs px-2.5 py-1 rounded bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-300 transition flex items-center gap-1">
+            ⚡ Benchmark (100x)
+          </button>
+        </div>
+
+        <!-- Neuron ID Input -->
+        <div class="space-y-2">
+          <div class="flex justify-between items-center text-xs">
+            <label for="inputNeuronId" class="text-slate-300 font-medium">Source Neuron Root ID</label>
+            <span class="text-slate-500">64-bit FlyWire ID</span>
+          </div>
+          <div class="relative">
+            <input type="text" id="inputNeuronId" class="w-full bg-slate-950 border border-slate-700 rounded-xl px-4 py-2.5 text-sm font-mono text-white placeholder-slate-600 focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 transition" placeholder="e.g. 720575940624000000">
+          </div>
+
+          <!-- Quick Sample Neurons -->
+          <div class="pt-1">
+            <p class="text-xs text-slate-500 mb-1.5">Quick Samples:</p>
+            <div id="samplePills" class="flex flex-wrap gap-1.5 text-xs font-mono">
+              <span class="text-slate-600 text-xs">Loading samples...</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Max Depth Slider -->
+        <div class="space-y-1.5">
+          <div class="flex justify-between text-xs">
+            <label for="sliderDepth" class="text-slate-300 font-medium">Max Cascade Depth (Hops)</label>
+            <span id="depthVal" class="font-mono text-emerald-400 font-bold">3 hops</span>
+          </div>
+          <input type="range" id="sliderDepth" min="1" max="8" value="3" class="w-full h-1.5 bg-slate-800 rounded-lg appearance-none cursor-pointer accent-emerald-500">
+          <div class="flex justify-between text-[10px] text-slate-500 font-mono">
+            <span>1 (Direct)</span>
+            <span>3 (Local Cascade)</span>
+            <span>8 (Brain-Wide)</span>
+          </div>
+        </div>
+
+        <!-- Min Synapse Weight Slider -->
+        <div class="space-y-1.5">
+          <div class="flex justify-between text-xs">
+            <label for="sliderWeight" class="text-slate-300 font-medium">Min Synaptic Weight</label>
+            <span id="weightVal" class="font-mono text-cyan-400 font-bold">≥ 2 synapses</span>
+          </div>
+          <input type="range" id="sliderWeight" min="1" max="25" value="2" class="w-full h-1.5 bg-slate-800 rounded-lg appearance-none cursor-pointer accent-cyan-500">
+          <p class="text-[11px] text-slate-500">Filters out weak/noisy connections to isolate strong signal propagation.</p>
+        </div>
+
+        <!-- Max Results -->
+        <div class="space-y-1.5">
+          <div class="flex justify-between text-xs">
+            <label for="sliderMaxNodes" class="text-slate-300 font-medium">Result Cap</label>
+            <span id="maxNodesVal" class="font-mono text-purple-400 font-bold">1,000 nodes</span>
+          </div>
+          <input type="range" id="sliderMaxNodes" min="100" max="5000" step="100" value="1000" class="w-full h-1.5 bg-slate-800 rounded-lg appearance-none cursor-pointer accent-purple-500">
+        </div>
+
+        <!-- Trace Action Button -->
+        <button id="btnTrace" class="w-full bg-gradient-to-r from-emerald-500 to-cyan-500 hover:from-emerald-600 hover:to-cyan-600 text-slate-950 font-bold py-3 px-4 rounded-xl shadow-lg shadow-emerald-500/25 flex items-center justify-center gap-2 transition active:scale-[0.99]">
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14 5l7 7m0 0l-7 7m7-7H3"/></svg>
+          Trace Downstream Activation
+        </button>
+      </div>
+
+      <!-- Telemetry Card -->
+      <div id="telemetryCard" class="bg-slate-900 border border-slate-800 rounded-2xl p-4 shadow-xl space-y-3">
+        <h3 class="text-xs font-semibold text-slate-400 uppercase tracking-wider">Search Telemetry</h3>
+        <div class="grid grid-cols-2 gap-3 text-xs">
+          <div class="p-3 rounded-xl bg-slate-950/60 border border-slate-800/80">
+            <span class="text-slate-500 block mb-0.5">Execution Latency</span>
+            <span id="telLatency" class="text-emerald-400 text-lg font-bold font-mono">--</span>
+          </div>
+          <div class="p-3 rounded-xl bg-slate-950/60 border border-slate-800/80">
+            <span class="text-slate-500 block mb-0.5">Neurons Activated</span>
+            <span id="telVisited" class="text-cyan-400 text-lg font-bold font-mono">--</span>
+          </div>
+          <div class="p-3 rounded-xl bg-slate-950/60 border border-slate-800/80">
+            <span class="text-slate-500 block mb-0.5">Max Depth</span>
+            <span id="telDepth" class="text-purple-400 text-lg font-bold font-mono">--</span>
+          </div>
+          <div class="p-3 rounded-xl bg-slate-950/60 border border-slate-800/80">
+            <span class="text-slate-500 block mb-0.5">Edges Formed</span>
+            <span id="telEdges" class="text-pink-400 text-lg font-bold font-mono">--</span>
+          </div>
+        </div>
+
+        <!-- Depth Layer Histogram -->
+        <div class="pt-2">
+          <p class="text-[11px] font-medium text-slate-400 mb-1.5">Cascade Flow by Depth Level:</p>
+          <div id="depthHistogram" class="space-y-1.5 font-mono text-xs">
+            <p class="text-slate-600 text-xs italic">Run a trace to inspect cascade distribution.</p>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Right Visualization & Results Area -->
+    <div class="lg:col-span-8 space-y-4 flex flex-col">
+      <!-- Canvas Card -->
+      <div class="bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden shadow-xl flex-1 flex flex-col min-h-[500px]">
+        <div class="bg-slate-950/80 px-4 py-2.5 border-b border-slate-800 flex items-center justify-between text-xs">
+          <div class="flex items-center space-x-2">
+            <span class="w-2.5 h-2.5 rounded-full bg-emerald-500"></span>
+            <span class="font-medium text-slate-300">Neural Activation Cascade Visualizer</span>
+          </div>
+          <div class="flex items-center space-x-2 text-slate-400">
+            <span class="flex items-center gap-1"><span class="w-2 h-2 rounded-full bg-emerald-400"></span> Root</span>
+            <span class="flex items-center gap-1"><span class="w-2 h-2 rounded-full bg-cyan-400"></span> Hop 1</span>
+            <span class="flex items-center gap-1"><span class="w-2 h-2 rounded-full bg-blue-500"></span> Hop 2</span>
+            <span class="flex items-center gap-1"><span class="w-2 h-2 rounded-full bg-purple-500"></span> Hop 3+</span>
+            <button id="btnResetView" class="ml-2 px-2 py-0.5 rounded bg-slate-800 hover:bg-slate-700 text-[11px] text-slate-300 border border-slate-700">Reset View</button>
+          </div>
+        </div>
+
+        <div class="relative flex-1 bg-slate-950 flex items-center justify-center">
+          <canvas id="graphCanvas" class="w-full h-full block"></canvas>
+          <div id="canvasOverlay" class="absolute inset-0 flex flex-col items-center justify-center pointer-events-none p-6 text-center">
+            <div class="p-4 rounded-2xl bg-slate-900/90 border border-slate-800 max-w-sm pointer-events-auto">
+              <svg class="w-10 h-10 text-emerald-400 mx-auto mb-2 opacity-80" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M13 10V3L4 14h7v7l9-11h-7z"/></svg>
+              <h4 class="font-semibold text-white text-sm mb-1">Interactive Neural Canvas</h4>
+              <p class="text-xs text-slate-400 mb-3">Select a sample neuron on the left or enter a custom FlyWire root ID to begin tracing.</p>
+              <button id="btnQuickStart" class="text-xs font-semibold px-3 py-1.5 rounded-lg bg-emerald-500 hover:bg-emerald-600 text-slate-950 transition">
+                Load Top Hub Neuron
+              </button>
+            </div>
+          </div>
+
+          <!-- Tooltip for hovered node -->
+          <div id="nodeTooltip" class="absolute hidden pointer-events-none bg-slate-900/95 border border-slate-700 rounded-xl p-3 shadow-2xl text-xs font-mono z-20 max-w-xs">
+            <div id="tooltipContent" class="space-y-1"></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Tabular List Card -->
+      <div class="bg-slate-900 border border-slate-800 rounded-2xl p-4 shadow-xl">
+        <div class="flex items-center justify-between pb-3 border-b border-slate-800">
+          <h3 class="text-xs font-semibold text-slate-300 uppercase tracking-wider flex items-center gap-2">
+            <svg class="w-4 h-4 text-cyan-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 10h16M4 14h16M4 18h16"/></svg>
+            Activated Neurons (<span id="tableCount">0</span>)
+          </h3>
+          <div class="flex gap-2">
+            <input type="text" id="filterTable" placeholder="Filter neuron ID..." class="text-xs bg-slate-950 border border-slate-700 rounded-lg px-2.5 py-1 text-slate-200 focus:outline-none focus:border-cyan-500 font-mono">
+            <button id="btnExportJson" class="text-xs px-2.5 py-1 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700">Export JSON</button>
+          </div>
+        </div>
+
+        <div class="max-h-60 overflow-y-auto mt-2">
+          <table class="w-full text-left text-xs font-mono">
+            <thead class="text-slate-500 border-b border-slate-800 sticky top-0 bg-slate-900">
+              <tr>
+                <th class="py-2 px-3">Neuron Root ID</th>
+                <th class="py-2 px-3">Depth</th>
+                <th class="py-2 px-3">Predecessor ID</th>
+                <th class="py-2 px-3">Synapse Count</th>
+                <th class="py-2 px-3">Signal Score</th>
+                <th class="py-2 px-3 text-right">Action</th>
+              </tr>
+            </thead>
+            <tbody id="neuronsTableBody" class="divide-y divide-slate-800/60 text-slate-300">
+              <tr>
+                <td colspan="6" class="py-6 text-center text-slate-500 italic">No search executed yet.</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </main>
+
+  <script>
+    // State
+    let currentResult = null;
+    let sampleNeurons = [];
+    let graphData = { nodes: [], edges: [] };
+    let camera = { x: 0, y: 0, zoom: 1 };
+    let isDragging = false;
+    let dragStart = { x: 0, y: 0 };
+    let hoveredNode = null;
+
+    // Elements
+    const canvas = document.getElementById('graphCanvas');
+    const ctx = canvas.getContext('2d');
+    const inputNeuronId = document.getElementById('inputNeuronId');
+    const sliderDepth = document.getElementById('sliderDepth');
+    const depthVal = document.getElementById('depthVal');
+    const sliderWeight = document.getElementById('sliderWeight');
+    const weightVal = document.getElementById('weightVal');
+    const sliderMaxNodes = document.getElementById('sliderMaxNodes');
+    const maxNodesVal = document.getElementById('maxNodesVal');
+    const btnTrace = document.getElementById('btnTrace');
+    const btnBenchmark = document.getElementById('btnBenchmark');
+    const samplePills = document.getElementById('samplePills');
+    const canvasOverlay = document.getElementById('canvasOverlay');
+    const btnQuickStart = document.getElementById('btnQuickStart');
+    const nodeTooltip = document.getElementById('nodeTooltip');
+    const tooltipContent = document.getElementById('tooltipContent');
+    const neuronsTableBody = document.getElementById('neuronsTableBody');
+    const tableCount = document.getElementById('tableCount');
+    const filterTable = document.getElementById('filterTable');
+    const btnResetView = document.getElementById('btnResetView');
+    const btnExportJson = document.getElementById('btnExportJson');
+
+    // Depth colors
+    const depthColors = {
+      0: '#10b981', // Emerald
+      1: '#06b6d4', // Cyan
+      2: '#3b82f6', // Blue
+      3: '#8b5cf6', // Violet
+      4: '#d946ef', // Fuchsia
+      5: '#f43f5e'  // Rose
+    };
+
+    // Sliders event listeners
+    sliderDepth.addEventListener('input', () => {
+      depthVal.textContent = `${sliderDepth.value} hops`;
+    });
+    sliderWeight.addEventListener('input', () => {
+      weightVal.textContent = `≥ ${sliderWeight.value} synapses`;
+    });
+    sliderMaxNodes.addEventListener('input', () => {
+      maxNodesVal.textContent = `${Number(sliderMaxNodes.value).toLocaleString()} nodes`;
+    });
+
+    // Resize canvas
+    function resizeCanvas() {
+      const rect = canvas.parentElement.getBoundingClientRect();
+      canvas.width = rect.width;
+      canvas.height = rect.height;
+      drawGraph();
+    }
+    window.addEventListener('resize', resizeCanvas);
+
+    // Fetch initial stats & sample neurons
+    async function loadStats() {
+      try {
+        const res = await fetch('/api/graph/stats');
+        const data = await res.json();
+        document.getElementById('statNodes').textContent = data.nodeCount.toLocaleString();
+        document.getElementById('statEdges').textContent = data.edgeCount.toLocaleString();
+        document.getElementById('statRam').textContent = `${data.memorySizeMb} MB`;
+
+        sampleNeurons = data.sampleNeurons || [];
+        renderSamplePills();
+      } catch (err) {
+        console.error('Failed to load stats:', err);
+      }
+    }
+
+    function renderSamplePills() {
+      samplePills.innerHTML = '';
+      sampleNeurons.forEach((s, idx) => {
+        const btn = document.createElement('button');
+        btn.className = 'px-2 py-0.5 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 hover:border-emerald-500/50 transition truncate max-w-[150px]';
+        btn.title = `${s.label} (${s.degree} synapses)`;
+        btn.textContent = idx === 0 ? `👑 Hub (${s.degree})` : `#${idx}: ${s.neuronId.toString().slice(-6)}`;
+        btn.addEventListener('click', () => {
+          inputNeuronId.value = s.neuronId;
+          runTrace();
+        });
+        samplePills.appendChild(btn);
+      });
+    }
+
+    btnQuickStart.addEventListener('click', () => {
+      if (sampleNeurons.length > 0) {
+        inputNeuronId.value = sampleNeurons[0].neuronId;
+        runTrace();
+      }
+    });
+
+    // Trace execution
+    async function runTrace() {
+      const rawId = inputNeuronId.value.trim();
+      if (!rawId) {
+        alert('Please enter or select a neuron ID.');
+        return;
+      }
+
+      btnTrace.disabled = true;
+      btnTrace.innerHTML = `<svg class="animate-spin -ml-1 mr-2 h-4 w-4 text-slate-950 inline" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z"></path></svg> Tracing Cascade...`;
+
+      try {
+        const payload = {
+          sourceNeuronId: rawId,
+          maxDepth: parseInt(sliderDepth.value),
+          minSynapseWeight: parseInt(sliderWeight.value),
+          maxResults: parseInt(sliderMaxNodes.value)
+        };
+
+        const res = await fetch('/api/trace/bfs', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload)
+        });
+
+        const data = await res.json();
+        currentResult = data;
+
+        if (!data.foundSource) {
+          alert(`Neuron ID '${rawId}' was not found in the connectome dataset.`);
+          return;
+        }
+
+        canvasOverlay.classList.add('hidden');
+        renderTelemetry(data);
+        renderTable(data.activatedNeurons);
+        layoutGraph(data);
+      } catch (err) {
+        console.error('Trace error:', err);
+        alert('Error performing trace: ' + err.message);
+      } finally {
+        btnTrace.disabled = false;
+        btnTrace.innerHTML = `<svg class="w-5 h-5 inline mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14 5l7 7m0 0l-7 7m7-7H3"/></svg> Trace Downstream Activation`;
+      }
+    }
+
+    btnTrace.addEventListener('click', runTrace);
+
+    // Benchmark button
+    btnBenchmark.addEventListener('click', async () => {
+      btnBenchmark.disabled = true;
+      btnBenchmark.textContent = 'Running 100x...';
+      try {
+        const res = await fetch('/api/benchmark', { method: 'POST' });
+        const data = await res.json();
+        alert(`⚡ Connectome Benchmark (50 iterations):\n\n` +
+              `• p50 Latency: ${data.p50Us} µs (${data.p50Ms} ms)\n` +
+              `• p95 Latency: ${data.p95Us} µs (${data.p95Ms} ms)\n` +
+              `• Fastest: ${data.minUs} µs\n` +
+              `• Avg Nodes Visited: ${data.avgNodesVisited}\n\n` +
+              `Zero-allocation CSR traversal is performing at top speed!`);
+      } catch (err) {
+        alert('Benchmark failed: ' + err.message);
+      } finally {
+        btnBenchmark.disabled = false;
+        btnBenchmark.textContent = '⚡ Benchmark (100x)';
+      }
+    });
+
+    function renderTelemetry(data) {
+      const latMs = (data.elapsedMicroseconds / 1000).toFixed(3);
+      document.getElementById('telLatency').textContent = `${latMs} ms (${Math.round(data.elapsedMicroseconds)} µs)`;
+      document.getElementById('telVisited').textContent = data.totalVisited.toLocaleString();
+      document.getElementById('telDepth').textContent = `${data.maxDepthReached} hops`;
+      document.getElementById('telEdges').textContent = (data.edges ? data.edges.length : 0).toLocaleString();
+
+      // Histogram
+      const histEl = document.getElementById('depthHistogram');
+      histEl.innerHTML = '';
+      const hist = data.depthHistogram || {};
+      const maxCount = Math.max(...Object.values(hist), 1);
+
+      Object.entries(hist).forEach(([depth, count]) => {
+        const row = document.createElement('div');
+        row.className = 'flex items-center gap-2 text-[11px]';
+        const pct = Math.max(5, (count / maxCount) * 100);
+        const col = depthColors[depth] || '#ec4899';
+        row.innerHTML = `
+          <span class="w-12 text-slate-400">Hop ${depth}:</span>
+          <div class="flex-1 bg-slate-950 rounded-full h-2 overflow-hidden">
+            <div class="h-full rounded-full transition-all duration-500" style="width: ${pct}%; background-color: ${col};"></div>
+          </div>
+          <span class="w-12 text-right text-slate-300">${count.toLocaleString()}</span>
+        `;
+        histEl.appendChild(row);
+      });
+    }
+
+    function renderTable(neurons) {
+      tableCount.textContent = (neurons || []).length.toLocaleString();
+      neuronsTableBody.innerHTML = '';
+
+      if (!neurons || neurons.length === 0) {
+        neuronsTableBody.innerHTML = '<tr><td colspan="6" class="py-4 text-center text-slate-500">No neurons activated.</td></tr>';
+        return;
+      }
+
+      neurons.slice(0, 100).forEach(n => {
+        const tr = document.createElement('tr');
+        tr.className = 'hover:bg-slate-800/40 transition cursor-pointer';
+        const col = depthColors[n.depth] || '#ec4899';
+        tr.innerHTML = `
+          <td class="py-2 px-3 text-white font-semibold flex items-center gap-1.5">
+            <span class="w-2 h-2 rounded-full" style="background-color: ${col};"></span>
+            ${n.neuronId}
+          </td>
+          <td class="py-2 px-3 text-slate-300">Hop ${n.depth}</td>
+          <td class="py-2 px-3 text-slate-400">${n.predecessorId || '-'}</td>
+          <td class="py-2 px-3 text-cyan-400 font-bold">${n.synapseWeight || '-'}</td>
+          <td class="py-2 px-3 text-emerald-400">${n.activationScore}</td>
+          <td class="py-2 px-3 text-right">
+            <button class="px-2 py-0.5 rounded bg-slate-800 hover:bg-emerald-500 hover:text-slate-950 text-slate-300 text-[10px] transition trace-this-btn">
+              Trace
+            </button>
+          </td>
+        `;
+        tr.querySelector('.trace-this-btn').addEventListener('click', (e) => {
+          e.stopPropagation();
+          inputNeuronId.value = n.neuronId;
+          runTrace();
+        });
+        neuronsTableBody.appendChild(tr);
+      });
+
+      if (neurons.length > 100) {
+        const tr = document.createElement('tr');
+        tr.innerHTML = `<td colspan="6" class="py-2 text-center text-slate-500 text-xs italic">Showing first 100 of ${neurons.length.toLocaleString()} neurons. Use Export JSON for full dataset.</td>`;
+        neuronsTableBody.appendChild(tr);
+      }
+    }
+
+    // Filter table
+    filterTable.addEventListener('input', () => {
+      const q = filterTable.value.trim().toLowerCase();
+      if (!currentResult || !currentResult.activatedNeurons) return;
+      const filtered = currentResult.activatedNeurons.filter(n => n.neuronId.toString().includes(q));
+      renderTable(filtered);
+    });
+
+    btnExportJson.addEventListener('click', () => {
+      if (!currentResult) return;
+      const blob = new Blob([JSON.stringify(currentResult, null, 2)], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `neuron_${currentResult.sourceNeuronId}_cascade.json`;
+      a.click();
+    });
+
+    // 2D Radial/Hierarchical Graph Layout & Renderer
+    function layoutGraph(data) {
+      const neurons = data.activatedNeurons || [];
+      const edges = data.edges || [];
+      const nodeMap = new Map();
+
+      // Group nodes by depth
+      const depthGroups = {};
+      neurons.forEach(n => {
+        if (!depthGroups[n.depth]) depthGroups[n.depth] = [];
+        depthGroups[n.depth].push(n);
+      });
+
+      const cx = canvas.width / 2;
+      const cy = canvas.height / 2;
+      const nodes = [];
+
+      // Layout in concentric rings by hop depth
+      Object.entries(depthGroups).forEach(([depthStr, group]) => {
+        const depth = parseInt(depthStr);
+        if (depth === 0) {
+          const rootNode = {
+            id: group[0].neuronId,
+            depth: 0,
+            x: cx,
+            y: cy,
+            radius: 9,
+            color: depthColors[0],
+            data: group[0]
+          };
+          nodes.push(rootNode);
+          nodeMap.set(rootNode.id.toString(), rootNode);
+          return;
+        }
+
+        const ringRadius = depth * 90;
+        const count = group.length;
+        group.forEach((n, idx) => {
+          const angle = (idx / count) * 2 * Math.PI + (depth * 0.4);
+          const jitter = (Math.random() - 0.5) * 20;
+          const node = {
+            id: n.neuronId,
+            depth: depth,
+            x: cx + Math.cos(angle) * (ringRadius + jitter),
+            y: cy + Math.sin(angle) * (ringRadius + jitter),
+            radius: Math.max(3.5, 7 - depth * 0.8),
+            color: depthColors[depth] || '#ec4899',
+            data: n
+          };
+          nodes.push(node);
+          nodeMap.set(node.id.toString(), node);
+        });
+      });
+
+      // Prepare edges
+      const graphEdges = [];
+      edges.forEach(e => {
+        const u = nodeMap.get(e.sourceId.toString());
+        const v = nodeMap.get(e.targetId.toString());
+        if (u && v) {
+          graphEdges.push({
+            source: u,
+            target: v,
+            weight: e.weight,
+            depth: e.depth
+          });
+        }
+      });
+
+      graphData = { nodes, edges: graphEdges };
+      resetCamera();
+    }
+
+    function resetCamera() {
+      camera = { x: 0, y: 0, zoom: 1 };
+      drawGraph();
+    }
+    btnResetView.addEventListener('click', resetCamera);
+
+    function drawGraph() {
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+      ctx.save();
+      ctx.translate(canvas.width / 2 + camera.x, canvas.height / 2 + camera.y);
+      ctx.scale(camera.zoom, camera.zoom);
+      ctx.translate(-canvas.width / 2, -canvas.height / 2);
+
+      // Draw edges
+      graphData.edges.forEach(e => {
+        ctx.beginPath();
+        ctx.moveTo(e.source.x, e.source.y);
+        ctx.lineTo(e.target.x, e.target.y);
+        ctx.strokeStyle = 'rgba(71, 85, 105, 0.4)';
+        ctx.lineWidth = Math.min(3, 0.6 + Math.log10(e.weight || 1));
+        ctx.stroke();
+      });
+
+      // Draw nodes
+      graphData.nodes.forEach(n => {
+        ctx.beginPath();
+        ctx.arc(n.x, n.y, n.radius, 0, 2 * Math.PI);
+        ctx.fillStyle = n.color;
+        ctx.fill();
+
+        if (n.depth === 0) {
+          // Glow effect for root
+          ctx.strokeStyle = 'rgba(16, 185, 129, 0.4)';
+          ctx.lineWidth = 6;
+          ctx.stroke();
+        }
+      });
+
+      // Draw hovered node highlight
+      if (hoveredNode) {
+        ctx.beginPath();
+        ctx.arc(hoveredNode.x, hoveredNode.y, hoveredNode.radius + 4, 0, 2 * Math.PI);
+        ctx.strokeStyle = '#ffffff';
+        ctx.lineWidth = 2;
+        ctx.stroke();
+      }
+
+      ctx.restore();
+    }
+
+    // Canvas Mouse Interactions (Pan & Zoom)
+    canvas.addEventListener('mousedown', (e) => {
+      isDragging = true;
+      dragStart = { x: e.clientX - camera.x, y: e.clientY - camera.y };
+    });
+
+    window.addEventListener('mousemove', (e) => {
+      if (isDragging) {
+        camera.x = e.clientX - dragStart.x;
+        camera.y = e.clientY - dragStart.y;
+        drawGraph();
+        return;
+      }
+
+      // Check node hover
+      const rect = canvas.getBoundingClientRect();
+      const mouseX = e.clientX - rect.left;
+      const mouseY = e.clientY - rect.top;
+
+      // Inverse transform
+      const worldX = (mouseX - canvas.width / 2 - camera.x) / camera.zoom + canvas.width / 2;
+      const worldY = (mouseY - canvas.height / 2 - camera.y) / camera.zoom + canvas.height / 2;
+
+      let found = null;
+      for (const n of graphData.nodes) {
+        const dx = n.x - worldX;
+        const dy = n.y - worldY;
+        if (dx * dx + dy * dy <= (n.radius + 3) * (n.radius + 3)) {
+          found = n;
+          break;
+        }
+      }
+
+      if (found !== hoveredNode) {
+        hoveredNode = found;
+        drawGraph();
+
+        if (hoveredNode) {
+          nodeTooltip.classList.remove('hidden');
+          nodeTooltip.style.left = `${mouseX + 12}px`;
+          nodeTooltip.style.top = `${mouseY + 12}px`;
+          const d = hoveredNode.data;
+          tooltipContent.innerHTML = `
+            <div class="text-white font-bold">${hoveredNode.id}</div>
+            <div class="text-slate-400">Depth: <span class="text-cyan-400 font-semibold">Hop ${hoveredNode.depth}</span></div>
+            ${d.predecessorId ? `<div class="text-slate-400">Predecessor: <span class="text-slate-300">${d.predecessorId}</span></div>` : ''}
+            ${d.synapseWeight ? `<div class="text-slate-400">Synapse Weight: <span class="text-emerald-400 font-semibold">${d.synapseWeight}</span></div>` : ''}
+            <div class="text-slate-400">Signal Score: <span class="text-purple-400 font-semibold">${d.activationScore}</span></div>
+            <div class="text-[10px] text-slate-500 pt-1">Click node to re-trace cascade</div>
+          `;
+        } else {
+          nodeTooltip.classList.add('hidden');
+        }
+      }
+    });
+
+    window.addEventListener('mouseup', () => {
+      isDragging = false;
+    });
+
+    canvas.addEventListener('wheel', (e) => {
+      e.preventDefault();
+      const zoomFactor = e.deltaY < 0 ? 1.15 : 0.85;
+      camera.zoom = Math.clamp(camera.zoom * zoomFactor, 0.2, 5.0);
+      drawGraph();
+    });
+
+    canvas.addEventListener('click', () => {
+      if (hoveredNode) {
+        inputNeuronId.value = hoveredNode.id;
+        runTrace();
+      }
+    });
+
+    Math.clamp = (val, min, max) => Math.min(Math.max(val, min), max);
+
+    // Initial load
+    resizeCanvas();
+    loadStats();
+  </script>
+</body>
+</html>

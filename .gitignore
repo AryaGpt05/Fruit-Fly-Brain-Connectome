@@ -1,0 +1,30 @@
+# .NET
+bin/
+obj/
+*.user
+*.suo
+*.cache
+*.dll
+*.exe
+*.pdb
+*.log
+
+# IDE
+.vs/
+.vscode/
+*.swp
+
+# Precomputed binary data (too large for git — regenerate with FruitFlyBrain.Ingest)
+precomputed/
+
+# Raw connectome data (too large for git)
+*.feather
+*.arrow
+*.parquet
+
+# OS
+Thumbs.db
+.DS_Store
+
+# Gemini / Antigravity
+.gemini/

@@ -1,0 +1,10 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/FruitFlyBrain.Api/FruitFlyBrain.Api.csproj" />
+    <Project Path="src/FruitFlyBrain.Engine/FruitFlyBrain.Engine.csproj" />
+    <Project Path="src/FruitFlyBrain.Ingest/FruitFlyBrain.Ingest.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/FruitFlyBrain.Tests/FruitFlyBrain.Tests.csproj" />
+  </Folder>
+</Solution>
